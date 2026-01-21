@@ -17,7 +17,7 @@ function AcceptQuestionPage() {
                     // onClick={() => navigate(-1)}
                     className="flex items-center text-sm text-gray-600 hover:text-black mb-6"
                 >
-                    ← Back to Questions
+                    ← Back to Question
                 </button>
 
                 {/* Card */}
