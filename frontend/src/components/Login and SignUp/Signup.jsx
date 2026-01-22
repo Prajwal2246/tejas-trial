@@ -80,7 +80,7 @@ function Signup() {
 			initial={{ opacity: 0, y: 40, scale: 0.95 }}
 			animate={{ opacity: 1, y: 0, scale: 1 }}
 			exit={{ opacity: 0, y: 40 }}
-			className="fixed bottom-[100px] right-[30px] z-50"
+			className="fixed bottom-[200px] right-[30px] z-50"
 		>
 			<div className="relative bg-black/90 backdrop-blur-xl border border-emerald-500/30 rounded-2xl p-5 shadow-[0_0_40px_rgba(16,185,129,0.35)]">
 				<div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-emerald-400/10 to-green-400/10" />
