@@ -116,14 +116,14 @@ export default function AskQuestion() {
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => navigate("/all-question-student")}
-                className="text-sm text-zinc-500 hover:text-white"
+                className="text-sm  text-red-500 hover:text-red-600 cursor-pointer"
               >
                 Cancel
               </button>
 
               <button
                 onClick={handleSubmit}
-                className="bg-white text-black px-6 py-3 rounded-xl font-semibold flex items-center gap-2"
+                className="bg-white cursor-pointer text-black px-6 py-3 rounded-xl font-semibold flex items-center gap-2"
               >
                 {isSubmitting ? "Posting..." : "Post Question"}
                 {!isSubmitting && <Send size={14} />}

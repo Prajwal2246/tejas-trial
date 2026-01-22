@@ -47,6 +47,7 @@ function StudentHomePage() {
           icon={<MessageCircle className="w-6 h-6 text-blue-400" />}
           title="Ask a Question"
           desc="Get help from expert tutors instantly."
+          label="Start Now"
           onClick={() => navigate("/ask")}
           delay={0}
         />
@@ -56,6 +57,7 @@ function StudentHomePage() {
           icon={<BookOpen className="w-6 h-6 text-purple-400" />}
           title="My Questions"
           desc="View responses and pending queries."
+          label="View My Questions"
           onClick={() => navigate("/dashboard")} // Ensure this route exists
           delay={0.1}
         />
@@ -65,6 +67,7 @@ function StudentHomePage() {
           icon={<Clock className="w-6 h-6 text-emerald-400" />}
           title="Session History"
           desc="Revisit your past learning sessions."
+          label="View Sessions"
           onClick={() => navigate("/sessions")} // Ensure this route exists
           delay={0.2}
         />
@@ -73,7 +76,7 @@ function StudentHomePage() {
   );
 }
 
-const ActionCard = ({ icon, title, desc, onClick, delay }) => {
+const ActionCard = ({ icon, title, desc, onClick, delay,label }) => {
   return (
     <motion.div
       variants={{
@@ -94,7 +97,7 @@ const ActionCard = ({ icon, title, desc, onClick, delay }) => {
         <p className="text-slate-400 text-sm mb-6 flex-1">{desc}</p>
         
         <div className="flex items-center text-blue-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
-          Start Now <ArrowRight className="w-4 h-4 ml-1" />
+          {label} <ArrowRight className="w-4 h-4 ml-1" />
         </div>
       </div>
     </motion.div>

@@ -11,7 +11,7 @@ function TutorHomePage() {
       action: () => navigate("/all-question-tutor"),
     },
     {
-      label: "My Schedule",
+      label: "My Sessions",
       action: () => {},
     },
     {
