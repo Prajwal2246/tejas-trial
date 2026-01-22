@@ -2,12 +2,15 @@ import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, Zap, ChevronRight } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 const Header = () => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+
+  const { user, logout } = useAuth();
 
   // Detect Scroll
   useEffect(() => {
@@ -41,7 +44,6 @@ const Header = () => {
         }`}
       >
         <div className="container mx-auto px-6 h-full flex items-center justify-between">
-          
           {/* 1. LOGO */}
           <div
             onClick={() => navigate("/")}
@@ -74,21 +76,37 @@ const Header = () => {
 
           {/* 3. AUTH BUTTONS (DESKTOP) */}
           <div className="hidden md:flex items-center gap-4">
-            <button
-              onClick={() => navigate("/login")}
-              className="text-sm font-semibold text-slate-300 hover:text-white transition-colors"
-            >
-              Log in
-            </button>
-            <button
-              onClick={() => navigate("/signup")}
-              className="group relative px-5 py-2.5 rounded-full overflow-hidden bg-white text-black font-bold text-sm shadow-[0_0_20px_rgba(255,255,255,0.3)] hover:shadow-[0_0_30px_rgba(34,211,238,0.6)] transition-all active:scale-95"
-            >
-              <span className="relative z-10 flex items-center gap-2">
-                Get Started <ChevronRight size={14} />
-              </span>
-              <div className="absolute inset-0 bg-gradient-to-r from-cyan-300 to-purple-300 translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-            </button>
+            {user ? (
+              <>
+                <span className="text-sm text-slate-300">
+                  Hi,{" "}
+                  <span className="text-white font-semibold">{user.name}</span>
+                </span>
+
+                <button
+                  onClick={logout}
+                  className="px-4 py-2 rounded-full border border-red-500/40 text-red-400 hover:bg-red-500/10 transition"
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => navigate("/login")}
+                  className="text-sm font-semibold text-slate-300 hover:text-white"
+                >
+                  Log in
+                </button>
+
+                <button
+                  onClick={() => navigate("/signup")}
+                  className="px-5 py-2.5 rounded-full bg-white text-black font-bold"
+                >
+                  Get Started
+                </button>
+              </>
+            )}
           </div>
 
           {/* 4. MOBILE TOGGLE */}
@@ -125,18 +143,36 @@ const Header = () => {
               ))}
               <hr className="border-white/10" />
               <div className="flex flex-col gap-4">
-                <button
-                  onClick={() => navigate("/login")}
-                  className="w-full py-4 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5 transition-colors"
-                >
-                  Log In
-                </button>
-                <button
-                  onClick={() => navigate("/signup")}
-                  className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-lg shadow-blue-500/20"
-                >
-                  Sign Up
-                </button>
+                {user ? (
+                  <>
+                    <p className="text-white font-semibold text-xl">
+                      👋 {user.name}
+                    </p>
+
+                    <button
+                      onClick={logout}
+                      className="w-full py-4 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      Logout
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => navigate("/login")}
+                      className="w-full py-4 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5 transition-colors"
+                    >
+                      Log In
+                    </button>
+
+                    <button
+                      onClick={() => navigate("/signup")}
+                      className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-lg shadow-blue-500/20"
+                    >
+                      Sign Up
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </motion.div>
