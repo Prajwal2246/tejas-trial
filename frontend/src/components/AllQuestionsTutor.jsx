@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
 const timeAgo = (date) => {
   const diff = Math.floor((Date.now() - new Date(date)) / 1000);
@@ -11,25 +12,14 @@ const timeAgo = (date) => {
 
 export default function AllQuestionsTutor() {
   const [questions, setQuestions] = useState([]);
+  const navigate = useNavigate();
 
   useEffect(() => {
     setQuestions(JSON.parse(localStorage.getItem("questions")) || []);
   }, []);
 
-  const acceptQuestion = (id) => {
-    const updated = questions.map((q) =>
-      q.id === id
-        ? { ...q, status: "accepted", acceptedBy: "tutor-1" }
-        : q
-    );
-    setQuestions(updated);
-    localStorage.setItem("questions", JSON.stringify(updated));
-  };
-
   const open = questions.filter((q) => q.status === "open");
-  const accepted = questions.filter(
-    (q) => q.status === "accepted" && q.acceptedBy === "tutor-1"
-  );
+  const accepted = questions.filter((q) => q.status === "accepted" && q.acceptedBy === "tutor-1"); // Hardcoded tutor
 
   return (
     <div className="min-h-screen bg-black px-6 py-20">
@@ -39,10 +29,7 @@ export default function AllQuestionsTutor() {
 
       {/* OPEN QUESTIONS */}
       <section className="mb-20">
-        <h2 className="text-2xl text-white mb-6">
-          Open Questions
-        </h2>
-
+        <h2 className="text-2xl text-white mb-6">Open Questions</h2>
         <div className="flex flex-wrap gap-8">
           {open.map((q) => (
             <motion.div
@@ -72,27 +59,16 @@ export default function AllQuestionsTutor() {
               </div>
 
               {/* TITLE */}
-              <h2 className="text-xl text-white font-semibold pr-20">
-                {q.title}
-              </h2>
+              <h2 className="text-xl text-white font-semibold pr-20">{q.title}</h2>
+              <p className="mt-4 text-sm text-zinc-300 line-clamp-3">{q.description}</p>
 
-              {/* DESCRIPTION */}
-              <p className="mt-4 text-sm text-zinc-300 line-clamp-3">
-                {q.description}
-              </p>
-
-              {/* ACTIONS */}
-              <div className="mt-6 flex justify-end gap-3">
-                <button className="text-sm text-indigo-400 hover:text-indigo-300">
-                  View →
-                </button>
+              {/* VIEW BUTTON */}
+              <div className="mt-6 flex justify-end">
                 <button
-                  onClick={() => acceptQuestion(q.id)}
-                  className="px-4 py-2 rounded-xl
-                             bg-indigo-500 text-white text-sm
-                             hover:bg-indigo-400 active:scale-95"
+                  onClick={() => navigate(`/tutor/question/${q.id}`)}
+                  className="text-sm text-indigo-400 hover:text-indigo-300"
                 >
-                  Accept
+                  View →
                 </button>
               </div>
             </motion.div>
@@ -102,10 +78,7 @@ export default function AllQuestionsTutor() {
 
       {/* ACCEPTED QUESTIONS */}
       <section>
-        <h2 className="text-2xl text-white mb-6">
-          Accepted Questions
-        </h2>
-
+        <h2 className="text-2xl text-white mb-6">Accepted Questions</h2>
         {accepted.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-zinc-900/40 p-10 text-center text-zinc-500">
             No accepted questions yet
@@ -123,7 +96,6 @@ export default function AllQuestionsTutor() {
                   shadow-xl p-8
                 "
               >
-                {/* TIME BADGE */}
                 <div className="absolute top-5 right-5">
                   <div className="
                     flex items-center gap-1.5
@@ -135,14 +107,8 @@ export default function AllQuestionsTutor() {
                     Accepted
                   </div>
                 </div>
-
-                <h2 className="text-xl text-white font-semibold pr-20">
-                  {q.title}
-                </h2>
-
-                <p className="mt-4 text-sm text-zinc-300">
-                  {q.description}
-                </p>
+                <h2 className="text-xl text-white font-semibold pr-20">{q.title}</h2>
+                <p className="mt-4 text-sm text-zinc-300">{q.description}</p>
               </motion.div>
             ))}
           </div>
