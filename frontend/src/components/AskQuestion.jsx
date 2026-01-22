@@ -2,14 +2,17 @@ import React, { useState } from "react";
 import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
 import { Send, HelpCircle, FileText, Hash, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
 
 export default function AskQuestion() {
   const navigate = useNavigate();
+  const { user } = useAuth(); // ✅ get logged-in user
 
   const [subject, setSubject] = useState("");
   const [details, setDetails] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // Mouse tracking for spotlight effect
   const mouseX = useMotionValue(0);
   const mouseY = useMotionValue(0);
 
@@ -20,7 +23,7 @@ export default function AskQuestion() {
   }
 
   const handleSubmit = () => {
-    if (!subject || !details) return;
+    if (!subject || !details || !user) return; // ensure user is logged in
 
     setIsSubmitting(true);
 
@@ -31,11 +34,11 @@ export default function AskQuestion() {
       createdAt: new Date().toISOString(),
       status: "open",
       acceptedBy: null,
+      studentId: user.uid,      // ✅ associate question with student
+      studentName: user.name,   // optional
     };
 
-    const existing =
-      JSON.parse(localStorage.getItem("questions")) || [];
-
+    const existing = JSON.parse(localStorage.getItem("questions")) || [];
     localStorage.setItem(
       "questions",
       JSON.stringify([newQuestion, ...existing])
@@ -52,6 +55,7 @@ export default function AskQuestion() {
       onMouseMove={handleMouseMove}
     >
       <motion.div className="relative w-full max-w-3xl rounded-3xl border border-white/10 bg-zinc-900/80 backdrop-blur-xl shadow-2xl overflow-hidden">
+        {/* Spotlight effect */}
         <motion.div
           className="pointer-events-none absolute -inset-px rounded-3xl"
           style={{
@@ -66,26 +70,22 @@ export default function AskQuestion() {
         />
 
         <div className="relative z-10 p-10 grid md:grid-cols-12 gap-12">
+          {/* Left info */}
           <div className="md:col-span-4 space-y-6">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center">
               <HelpCircle className="text-white" />
             </div>
-            <h2 className="text-2xl font-bold text-white">
-              Ask a Question
-            </h2>
-            <p className="text-zinc-400 text-sm">
-              Get help from expert tutors.
-            </p>
+            <h2 className="text-2xl font-bold text-white">Ask a Question</h2>
+            <p className="text-zinc-400 text-sm">Get help from expert tutors.</p>
             <div className="flex items-center gap-2 text-xs text-indigo-400">
               <Sparkles size={12} /> AI Assisted
             </div>
           </div>
 
+          {/* Form */}
           <div className="md:col-span-8 space-y-6">
             <div>
-              <label className="text-xs text-zinc-500 uppercase">
-                Subject
-              </label>
+              <label className="text-xs text-zinc-500 uppercase">Subject</label>
               <div className="relative">
                 <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500" />
                 <input
@@ -98,9 +98,7 @@ export default function AskQuestion() {
             </div>
 
             <div>
-              <label className="text-xs text-zinc-500 uppercase">
-                Details
-              </label>
+              <label className="text-xs text-zinc-500 uppercase">Details</label>
               <div className="relative">
                 <FileText className="absolute left-4 top-4 text-zinc-500" />
                 <textarea
@@ -113,6 +111,7 @@ export default function AskQuestion() {
               </div>
             </div>
 
+            {/* Action buttons */}
             <div className="flex justify-end gap-4">
               <button
                 onClick={() => navigate("/all-question-student")}
@@ -135,4 +134,3 @@ export default function AskQuestion() {
     </div>
   );
 }
-

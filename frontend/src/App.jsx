@@ -17,6 +17,7 @@ import TermsOfService from "./components/FooterComponents/TermsOfService";
 
 import AllQuestionsStudent from "./components/AllQuestionsStudent";
 import AllQuestionsTutor from "./components/AllQuestionsTutor";
+import TutorQuestionDetail from "./components/TutorQuestionDetail";
 
 function App() {
   const router = createBrowserRouter([
@@ -50,6 +51,7 @@ function App() {
 
         { path: "/all-question-student", element: <AllQuestionsStudent /> },
         { path: "/all-question-tutor", element: <AllQuestionsTutor /> },
+        { path: "/tutor/question/:id", element: <TutorQuestionDetail /> }
         //  {path:"/questions1",element:<AllQuestionsTutor/>}
       ],
     },
