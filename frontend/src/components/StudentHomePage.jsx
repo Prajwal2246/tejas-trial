@@ -2,38 +2,42 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { BookOpen, MessageCircle, Clock, ArrowRight } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 function StudentHomePage() {
-  const navigate = useNavigate();
+	const navigate = useNavigate();
+	const { user } = useAuth();
 
-  const container = {
-    hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.1 }
-    }
-  };
+	const container = {
+		hidden: { opacity: 0 },
+		show: {
+			opacity: 1,
+			transition: { staggerChildren: 0.1 },
+		},
+	};
 
-  const item = {
-    hidden: { opacity: 0, y: 20 },
-    show: { opacity: 1, y: 0 }
-  };
+	const item = {
+		hidden: { opacity: 0, y: 20 },
+		show: { opacity: 1, y: 0 },
+	};
 
-  return (
-    <div className="w-full max-w-5xl mx-auto space-y-12">
-      {/* Hero Section */}
-      <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center space-y-4 pt-10"
-      >
-        <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white">
-          Hello, <span className="text-blue-500">Student</span>
-        </h1>
-        <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-          Ready to learn? Ask a question or review your past sessions to keep moving forward.
-        </p>
-      </motion.div>
+	return (
+		<div className="w-full max-w-5xl mx-auto space-y-12">
+			{/* Hero Section */}
+			<motion.div
+				initial={{ opacity: 0, y: 20 }}
+				animate={{ opacity: 1, y: 0 }}
+				className="text-center space-y-4 pt-10"
+			>
+				<h1 className="text-4xl md:text-6xl font-bold tracking-tight text-white">
+					Hello,{" "}
+					<span className="text-blue-500">{user?.name || "Student"}</span>
+				</h1>
+				<p className="text-lg text-slate-400 max-w-2xl mx-auto">
+					Ready to learn? Ask a question or review your past sessions to keep
+					moving forward.
+				</p>
+			</motion.div>
 
       {/* Action Grid */}
       <motion.div 
