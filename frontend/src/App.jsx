@@ -6,14 +6,17 @@ import StudentHomePage from "./components/StudentHomePage";
 import TutorHomePage from "./components/TutorHomePage";
 import AskQuestion from "./components/AskQuestion";
 import "./App.css";
+
 import AdminDashboard from "./components/AdminDashboard";
-import ProtectedRoute from "./components/ProtectedRoute"
+import ProtectedRoute from "./components/ProtectedRoute";
 import ContactSupport from "./components/FooterComponents/ContactSupport";
 import HelpCenter from "./components/FooterComponents/HelpCenter";
 import PricingPlans from "./components/FooterComponents/PricingPlans";
 import PrivacyPolicy from "./components/FooterComponents/PrivacyPolicy";
 import TermsOfService from "./components/FooterComponents/TermsOfService";
 
+import AllQuestionsStudent from "./components/AllQuestionsStudent";
+import AllQuestionsTutor from "./components/AllQuestionsTutor";
 
 function App() {
   const router = createBrowserRouter([
@@ -37,12 +40,17 @@ function App() {
           ),
         },
         { path: "/ask", element: <AskQuestion /> },
+
         { path: "/admin", element: <AdminDashboard /> },
         { path: "/contact", element: <ContactSupport></ContactSupport> },
-				{ path: "/help", element: <HelpCenter></HelpCenter> },
-				{ path: "/pricing", element: <PricingPlans></PricingPlans> },
-				{ path: "/privacy", element: <PrivacyPolicy></PrivacyPolicy> },
-				{ path: "/terms", element: <TermsOfService></TermsOfService> },
+        { path: "/help", element: <HelpCenter></HelpCenter> },
+        { path: "/pricing", element: <PricingPlans></PricingPlans> },
+        { path: "/privacy", element: <PrivacyPolicy></PrivacyPolicy> },
+        { path: "/terms", element: <TermsOfService></TermsOfService> },
+
+        { path: "/all-question-student", element: <AllQuestionsStudent /> },
+        { path: "/all-question-tutor", element: <AllQuestionsTutor /> },
+        //  {path:"/questions1",element:<AllQuestionsTutor/>}
       ],
     },
   ]);
@@ -51,5 +59,3 @@ function App() {
 }
 
 export default App;
-
-

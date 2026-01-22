@@ -12,6 +12,11 @@ const Header = () => {
 
   const { user, logout } = useAuth();
 
+  const handleLogout = async () => {
+		await logout();
+		navigate("/login");
+	};
+
   // Detect Scroll
   useEffect(() => {
     const handleScroll = () => {
@@ -84,7 +89,7 @@ const Header = () => {
                 </span>
 
                 <button
-                  onClick={logout}
+                  onClick={handleLogout}
                   className="px-4 py-2 rounded-full border border-red-500/40 text-red-400 hover:bg-red-500/10 transition"
                 >
                   Logout
@@ -150,7 +155,7 @@ const Header = () => {
                     </p>
 
                     <button
-                      onClick={logout}
+                      onClick={handleLogout}
                       className="w-full py-4 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       Logout
