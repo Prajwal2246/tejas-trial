@@ -6,6 +6,9 @@ import StudentHomePage from "./components/StudentHomePage";
 import TutorHomePage from "./components/TutorHomePage";
 import AskQuestion from "./components/AskQuestion";
 import "./App.css";
+import AllQuestionsStudent from "./components/AllQuestionsStudent";
+import AllQuestionsTutor from "./components/AllQuestionsTutor";
+// import AllQuestionsTutor from "./components/AllQuestionsTutor";
 
 
 function App() {
@@ -23,6 +26,9 @@ function App() {
         { path: "/student-home", element: <StudentHomePage /> },
         { path: "/tutor-home", element: <TutorHomePage /> },
         { path: "/ask", element: <AskQuestion /> },
+         {path:"/all-question-student",element:<AllQuestionsStudent/>},
+         {path:"/all-question-tutor",element:<AllQuestionsTutor/>}
+        //  {path:"/questions1",element:<AllQuestionsTutor/>}
       ],
     },
   ]);
