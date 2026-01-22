@@ -21,7 +21,6 @@ import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { db, auth } from "../../firebase";
 import { createUserWithEmailAndPassword } from "firebase/auth";
 
-
 function Signup() {
   const navigate = useNavigate();
 
@@ -134,51 +133,56 @@ function Signup() {
 
   /* ---------------- SUBMIT ---------------- */
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  if (!validate()) return;
+    e.preventDefault();
+    if (!validate()) return;
 
-  try {
-    setLoading(true);
+    try {
+      setLoading(true);
 
-    // 🔐 Create auth user (enforces unique email)
-    const userCredentials = await createUserWithEmailAndPassword(
-      auth,
-      formData.email,
-      formData.password
-    );
+      // 🔐 Create auth user (enforces unique email)
+      const userCredentials = await createUserWithEmailAndPassword(
+        auth,
+        formData.email,
+        formData.password,
+      );
 
-    const user = userCredentials.user;
+      const user = userCredentials.user;
 
-    // 📦 Store profile using UID
-    await setDoc(doc(db, "users", user.uid), {
-      name: formData.name,
-      email: formData.email,
-      role,
-      createdAt: serverTimestamp(),
-    });
+      // 📦 Store profile using UID
+      const userData = {
+        name: formData.name,
+        email: formData.email,
+        role,
+        createdAt: serverTimestamp(),
+      };
 
-    // ✅ reset form
-    setFormData({ name: "", email: "", password: "" });
-    setRole("Student");
-    setErrors({});
+      // 👇 Only tutors need approval
+      if (role === "Tutor") {
+        userData.isApproved = false;
+      }
 
-    // ✅ success toast (ONLY ONCE)
-    setSuccess(true);
-    setTimeout(() => setSuccess(false), 4000);
+      await setDoc(doc(db, "users", user.uid), userData);
 
-  } catch (err) {
-    console.error("firebase error", err);
+      // ✅ reset form
+      setFormData({ name: "", email: "", password: "" });
+      setRole("Student");
+      setErrors({});
 
-    if (err.code === "auth/email-already-in-use") {
-      setErrors({ email: "Email already registered" });
-    } else {
-      alert("Something went wrong. Please try again.");
+      // ✅ success toast (ONLY ONCE)
+      setSuccess(true);
+      setTimeout(() => setSuccess(false), 4000);
+    } catch (err) {
+      console.error("firebase error", err);
+
+      if (err.code === "auth/email-already-in-use") {
+        setErrors({ email: "Email already registered" });
+      } else {
+        alert("Something went wrong. Please try again.");
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
-};
-
+  };
 
   return (
     <div

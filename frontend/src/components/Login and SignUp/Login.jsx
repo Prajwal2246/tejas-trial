@@ -1,11 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  motion,
-  useMotionValue,
-  useTransform,
-  useSpring,
-} from "framer-motion";
+import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { Zap, ArrowRight, Lock, Mail } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
@@ -46,11 +41,7 @@ function Login() {
       setLoading(true);
 
       // 🔐 Firebase Auth
-      const userCred = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
 
       const user = userCred.user;
 
@@ -67,11 +58,14 @@ function Login() {
 
       // 🔀 Role-based redirect
       if (userData.role === "Tutor") {
+        if (userData.isApproved === false) {
+          await auth.signOut();
+          throw new Error("TUTOR_NOT_APPROVED");
+        }
         navigate("/tutor-home");
       } else {
         navigate("/student-home");
       }
-
     } catch (err) {
       console.error(err);
 
@@ -81,10 +75,11 @@ function Login() {
         setError("Incorrect password");
       } else if (err.code === "auth/invalid-email") {
         setError("Invalid email address");
+      } else if (err.message === "TUTOR_NOT_APPROVED") {
+        setError("Your tutor account is pending admin approval");
       } else {
         setError("Login failed. Please try again.");
       }
-
     } finally {
       setLoading(false);
     }
