@@ -46,14 +46,31 @@ export default function TutorQuestionDetail() {
     fetchQuestion();
   }, [id]);
 
-  const acceptQuestion = () => {
-    const questions = JSON.parse(localStorage.getItem("questions")) || [];
-    const updated = questions.map((q) =>
-      q.id === Number(id) ? { ...q, status: "accepted", acceptedBy: "tutor-1" } : q
-    );
-    localStorage.setItem("questions", JSON.stringify(updated));
-    navigate("/all-question-tutor");
+  /* 🔹 Accept question */
+  const acceptQuestion = async () => {
+    if (!user) return;
+
+    try {
+      const ref = doc(db, "questions", id);
+
+      await updateDoc(ref, {
+        status: "accepted",
+        acceptedBy: user.uid,
+        acceptedAt: serverTimestamp(),
+      });
+
+      navigate("/all-question-tutor");
+    } catch (error) {
+      console.error("Error accepting question:", error);
+    }
   };
+
+  if (loading)
+    return (
+      <p className="text-white p-10 text-center">
+        Loading...
+      </p>
+    );
 
   if (!question)
     return (
@@ -116,7 +133,16 @@ export default function TutorQuestionDetail() {
           {question.status === "open" ? (
             <button
               onClick={acceptQuestion}
-              className="relative inline-flex items-center px-8 py-3 bg-green-500 text-white font-semibold rounded-xl shadow-lg hover:bg-green-600 hover:scale-105 transition-transform active:scale-95 overflow-hidden group"
+              className="
+                relative inline-flex items-center
+                px-8 py-3
+                bg-green-500 text-white
+                font-semibold rounded-xl
+                shadow-lg
+                hover:bg-green-600 hover:scale-105
+                transition-transform active:scale-95
+                overflow-hidden group
+              "
             >
               <span className="absolute inset-0 bg-white/10 rounded-xl blur-sm opacity-0 group-hover:opacity-30 transition-opacity"></span>
               Accept Question & Start Session
