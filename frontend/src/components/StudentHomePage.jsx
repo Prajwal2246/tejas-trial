@@ -89,7 +89,7 @@ const ActionCard = ({ icon, title, desc, onClick, delay,label }) => {
         show: { opacity: 1, y: 0 }
       }}
       whileHover={{ y: -5, transition: { duration: 0.2 } }}
-      onClick={()=>navigate("/all-question-student")}
+      onClick={onClick}
       className="group relative p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-blue-500/50 cursor-pointer transition-colors overflow-hidden"
     >
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />

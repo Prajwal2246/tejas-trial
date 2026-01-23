@@ -24,7 +24,9 @@ export default function TutorQuestionDetail() {
   const acceptQuestion = () => {
     const questions = JSON.parse(localStorage.getItem("questions")) || [];
     const updated = questions.map((q) =>
-      q.id === Number(id) ? { ...q, status: "accepted", acceptedBy: "tutor-1" } : q
+      q.id === Number(id)
+        ? { ...q, status: "accepted", acceptedBy: "tutor-1" }
+        : q,
     );
     localStorage.setItem("questions", JSON.stringify(updated));
     navigate("/all-question-tutor");
@@ -35,7 +37,6 @@ export default function TutorQuestionDetail() {
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center p-6 space-y-6">
-      
       {/* Back Button */}
       <div className="w-full max-w-4xl">
         <button
@@ -81,7 +82,7 @@ export default function TutorQuestionDetail() {
           {/* Accept Action */}
           {question.status === "open" ? (
             <button
-              onClick={acceptQuestion}
+              onClick={() => navigate(`/tutor/question/${id}/accept`)}
               className="relative inline-flex items-center px-8 py-3 bg-green-500 text-white font-semibold rounded-xl shadow-lg hover:bg-green-600 hover:scale-105 transition-transform active:scale-95 overflow-hidden group"
             >
               <span className="absolute inset-0 bg-white/10 rounded-xl blur-sm opacity-0 group-hover:opacity-30 transition-opacity"></span>

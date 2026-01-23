@@ -18,6 +18,8 @@ import TermsOfService from "./components/FooterComponents/TermsOfService";
 import AllQuestionsStudent from "./components/AllQuestionsStudent";
 import AllQuestionsTutor from "./components/AllQuestionsTutor";
 import TutorQuestionDetail from "./components/TutorQuestionDetail";
+import VideoSession from "./components/VideoSession";
+import AcceptQuestionPage from "./components/AcceptQuestionPage";
 
 function App() {
   const router = createBrowserRouter([
@@ -51,7 +53,11 @@ function App() {
 
         { path: "/all-question-student", element: <AllQuestionsStudent /> },
         { path: "/all-question-tutor", element: <AllQuestionsTutor /> },
-        { path: "/tutor/question/:id", element: <TutorQuestionDetail /> }
+        { path: "/tutor/question/:id", element: <TutorQuestionDetail /> },
+        { path: "/session/:roomId", element: <VideoSession /> },
+        { path: "/tutor/question/:id/accept", element: <AcceptQuestionPage /> },
+
+
         //  {path:"/questions1",element:<AllQuestionsTutor/>}
       ],
     },
