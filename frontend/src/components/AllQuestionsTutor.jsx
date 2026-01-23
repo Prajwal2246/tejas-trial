@@ -36,8 +36,7 @@ export default function AllQuestionsTutor() {
     /* 🔹 Open questions */
     const openQuery = query(
       collection(db, "questions"),
-      where("status", "==", "open"),
-      orderBy("createdAt", "desc")
+      where("status", "==", "open")
     );
 
     /* 🔹 Accepted by this tutor */
