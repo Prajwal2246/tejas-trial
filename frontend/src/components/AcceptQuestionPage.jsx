@@ -1,42 +1,40 @@
 import { useNavigate, useParams } from "react-router-dom";
-import { collection, doc, setDoc } from "firebase/firestore";
+import { doc, setDoc, updateDoc, serverTimestamp, collection } from "firebase/firestore";
 import { db } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 
 function AcceptQuestionPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth(); // logged-in tutor
 
   const startSession = async () => {
-    // 1️⃣ Create Firestore call room
-    const callDoc = doc(collection(db, "calls"));
-    await setDoc(callDoc, { createdAt: Date.now() });
+    if (!user) return;
 
-    // 2️⃣ Update question in localStorage
-    const questions = JSON.parse(localStorage.getItem("questions")) || [];
+    try {
+      // 1️⃣ Create Firestore call room
+      const callDocRef = doc(collection(db, "calls"));
+      await setDoc(callDocRef, { createdAt: serverTimestamp() });
 
-    const updated = questions.map((q) =>
-      q.id === Number(id)
-        ? {
-            ...q,
-            status: "accepted",
-            acceptedBy: "tutor-1",
-            roomId: callDoc.id,
-          }
-        : q
-    );
+      // 2️⃣ Update question in Firestore
+      const questionRef = doc(db, "questions", id);
+      await updateDoc(questionRef, {
+        status: "accepted",
+        acceptedBy: user.uid,
+        roomId: callDocRef.id,
+        acceptedAt: serverTimestamp(),
+      });
 
-    localStorage.setItem("questions", JSON.stringify(updated));
-
-    // 3️⃣ Navigate to video session
-    navigate(`/session/${callDoc.id}`);
+      // 3️⃣ Navigate to session
+      navigate(`/session/${callDocRef.id}`);
+    } catch (err) {
+      console.error("Error starting session:", err);
+    }
   };
 
   return (
     <div className="min-h-screen bg-slate-900">
-      
-      {/* 📄 Content */}
-      <main className="max-w-4xl mx-auto px-6 py-12 ">
-        {/* Back */}
+      <main className="max-w-4xl mx-auto px-6 py-12">
         <button
           onClick={() => navigate(-1)}
           className="text-sm text-gray-300 hover:text-black mb-6"
@@ -44,12 +42,8 @@ function AcceptQuestionPage() {
           ← Back to Question
         </button>
 
-        {/* Card */}
         <div className="bg-slate-800 border border-slate-500 rounded-xl p-8 shadow-sm">
-          <h2 className="text-2xl font-semibold mb-2">
-            Ready to start the session?
-          </h2>
-
+          <h2 className="text-2xl font-semibold mb-2">Ready to start the session?</h2>
           <p className="text-slate-400 mb-8">
             This will create a live video room and connect you with the student.
           </p>

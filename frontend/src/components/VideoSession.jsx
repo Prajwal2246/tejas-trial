@@ -8,73 +8,54 @@ import {
   onSnapshot,
   setDoc,
   updateDoc,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function VideoSession() {
+export default function VideoSession({ headerHeight = "h-16", isTutor = false }) {
   const { roomId } = useParams();
   const navigate = useNavigate();
 
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const localStreamRef = useRef(null);
-  const isMountedRef = useRef(true);
   const pc = useRef(null);
+  const isMountedRef = useRef(true);
   const unsubscribers = useRef([]);
 
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
+  const [callStarted, setCallStarted] = useState(false);
 
-  // Helper to safely stop any stream
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState("");
+  const chatEndRef = useRef(null);
+
+  // ================= Helper =================
   const stopMediaStream = (stream) => {
-    if (stream) {
-      stream.getTracks().forEach((track) => {
-        track.stop();
-        track.enabled = false;
-      });
-    }
+    if (stream) stream.getTracks().forEach((track) => (track.stop(), (track.enabled = false)));
   };
 
+  const scrollToBottom = () => {
+    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // ================= Media =================
   const setupMedia = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-
-      // 1. Check if user left while waiting for camera
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       if (!isMountedRef.current) {
         stopMediaStream(stream);
         return null;
       }
+      if (localStreamRef.current) stopMediaStream(localStreamRef.current);
 
-      // 2. THE FIX: Check if a "Zombie" stream already exists in the ref.
-      // If Strict Mode ran twice, 'localStreamRef.current' might hold the 
-      // result of the previous async call. We MUST stop it before overwriting.
-      if (localStreamRef.current) {
-        console.warn("Cleaning up zombie stream before setting new one");
-        stopMediaStream(localStreamRef.current);
-      }
-
-      // 3. Now it is safe to assign
       localStreamRef.current = stream;
-      if (localVideoRef.current) {
-        localVideoRef.current.srcObject = stream;
-      }
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-      pc.current = new RTCPeerConnection({
-        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
-      });
-
-      stream.getTracks().forEach((track) => {
-        if (pc.current) pc.current.addTrack(track, stream);
-      });
-
-      pc.current.ontrack = (event) => {
-        if (remoteVideoRef.current) {
-          remoteVideoRef.current.srcObject = event.streams[0];
-        }
-      };
+      pc.current = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
+      stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
+      pc.current.ontrack = (e) => remoteVideoRef.current && (remoteVideoRef.current.srcObject = e.streams[0]);
 
       return stream;
     } catch (err) {
@@ -83,12 +64,37 @@ export default function VideoSession() {
     }
   };
 
+  // ================= Chat =================
+  const setupChatListener = () => {
+    const messagesCol = collection(db, "calls", roomId, "messages");
+    unsubscribers.current.push(
+      onSnapshot(messagesCol, (snap) => {
+        const msgs = snap.docs
+          .map((doc) => ({ id: doc.id, ...doc.data() }))
+          .sort((a, b) => (a.timestamp?.toMillis() || 0) - (b.timestamp?.toMillis() || 0));
+        setMessages(msgs);
+        scrollToBottom();
+      })
+    );
+  };
+
+  const sendMessage = async () => {
+    if (!newMessage.trim()) return;
+    const messagesCol = collection(db, "calls", roomId, "messages");
+    await addDoc(messagesCol, {
+      text: newMessage,
+      sender: isTutor ? "Tutor" : "Student",
+      timestamp: serverTimestamp(),
+    });
+    setNewMessage("");
+  };
+
+  // ================= Peer =================
   const startOrJoinCall = async () => {
-    // Ensure we don't run this if unmounted
     if (!isMountedRef.current) return;
-    
+
     const stream = await setupMedia();
-    if (!stream) return; 
+    if (!stream) return;
 
     const callDoc = doc(db, "calls", roomId);
     const offerCandidates = collection(callDoc, "offerCandidates");
@@ -96,15 +102,12 @@ export default function VideoSession() {
 
     if (!pc.current) return;
 
-    pc.current.onicecandidate = (e) => {
-      if (e.candidate) addDoc(offerCandidates, e.candidate.toJSON());
-    };
+    pc.current.onicecandidate = (e) => e.candidate && addDoc(offerCandidates, e.candidate.toJSON());
 
     const callData = (await getDoc(callDoc)).data();
-    if (!isMountedRef.current || !pc.current) return;
 
-    if (!callData) {
-      // Tutor
+    // Tutor initiates call
+    if (isTutor && callStarted) {
       const offer = await pc.current.createOffer();
       await pc.current.setLocalDescription(offer);
       await setDoc(callDoc, { offer: { type: offer.type, sdp: offer.sdp } });
@@ -112,53 +115,35 @@ export default function VideoSession() {
       unsubscribers.current.push(
         onSnapshot(callDoc, (snap) => {
           const data = snap.data();
-          if (pc.current && data?.answer && !pc.current.currentRemoteDescription) {
+          if (pc.current && data?.answer && !pc.current.currentRemoteDescription)
             pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-          }
         })
       );
-      // ... (Rest of Tutor Logic)
-    } else {
-      // Student
+    } else if (!isTutor && callData?.offer) {
+      // Student joins automatically when offer exists
       await pc.current.setRemoteDescription(new RTCSessionDescription(callData.offer));
       const answer = await pc.current.createAnswer();
       await pc.current.setLocalDescription(answer);
       await updateDoc(callDoc, { answer: { type: answer.type, sdp: answer.sdp } });
-      // ... (Rest of Student Logic)
     }
-    
-    // Setup listener for candidates (Simplified for brevity, keep your existing logic)
-    const candidateCollection = !callData ? answerCandidates : offerCandidates;
+
+    const candidateCollection = !callData?.offer ? answerCandidates : offerCandidates;
     unsubscribers.current.push(
       onSnapshot(candidateCollection, (snap) => {
-        if (pc.current) {
-           snap.docChanges().forEach((c) => {
-            if (c.type === "added") {
-              pc.current.addIceCandidate(new RTCIceCandidate(c.doc.data()));
-            }
-          });
-        }
+        snap.docChanges().forEach((c) => {
+          if (c.type === "added") pc.current.addIceCandidate(new RTCIceCandidate(c.doc.data()));
+        });
       })
     );
+
+    setupChatListener();
   };
 
   const stopSession = () => {
-    // Stop the media stream securely
-    if (localStreamRef.current) {
-      stopMediaStream(localStreamRef.current);
-      localStreamRef.current = null;
-    }
-    
-    // Also explicitly clear the video element src
-    if (localVideoRef.current) {
-      localVideoRef.current.srcObject = null;
-    }
-
-    if (pc.current) {
-      pc.current.close();
-      pc.current = null;
-    }
-
+    if (localStreamRef.current) stopMediaStream(localStreamRef.current);
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (pc.current) pc.current.close();
     unsubscribers.current.forEach((unsub) => unsub());
     unsubscribers.current = [];
   };
@@ -179,73 +164,92 @@ export default function VideoSession() {
     });
   };
 
-  const leaveSession = () => {
-    navigate(-1);
-  };
+  const leaveSession = () => navigate(-1);
 
   useEffect(() => {
     isMountedRef.current = true;
-    startOrJoinCall();
-
+    if (!isTutor) startOrJoinCall(); // Students auto-join
     return () => {
       isMountedRef.current = false;
       stopSession();
     };
   }, []);
 
+  // ================= JSX =================
   return (
-    <main className="min-h-screen bg-black flex flex-col items-center p-6 gap-6">
-      <button
-        onClick={leaveSession}
-        className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-white/10 text-white hover:bg-white/20"
-      >
-        ← Leave Session
-      </button>
+    <main className="flex bg-gray-900 min-h-screen">
+      {/* Video + Call */}
+      <div className="flex-1 flex flex-col p-4 mt-[64px] relative">
+        {/* Call Button for Tutor */}
+        {isTutor && !callStarted && (
+          <button
+            onClick={() => { setCallStarted(true); startOrJoinCall(); }}
+            className="mb-4 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-500 self-start"
+          >
+            Call Student
+          </button>
+        )}
 
-      <div className="flex flex-col lg:flex-row gap-6 w-full max-w-6xl">
-        <div className="flex flex-col gap-4 flex-1">
-          <div className="rounded-lg border bg-gray-900 shadow-sm p-4 flex flex-col items-center">
-            <video
-              ref={localVideoRef}
-              autoPlay
-              muted
-              playsInline
-              className="w-full rounded-md bg-black"
-            />
+        <div className="flex gap-4 flex-wrap">
+          {/* Remote Video */}
+          <div className="relative w-64 h-48 rounded-md overflow-hidden border-2 border-gray-700 shadow-lg">
+            <video ref={remoteVideoRef} autoPlay playsInline className="w-full h-full object-cover" />
           </div>
-          <div className="flex justify-center gap-4 mt-2">
-            <button
-              onClick={toggleMic}
-              className={`px-4 py-2 rounded-md bg-gray-700 text-white ${
-                micOn ? "bg-green-600" : "bg-red-600"
-              }`}
-            >
-              {micOn ? "Mic On" : "Mic Off"}
-            </button>
-            <button
-              onClick={toggleCam}
-              className={`px-4 py-2 rounded-md bg-gray-700 text-white ${
-                camOn ? "bg-green-600" : "bg-red-600"
-              }`}
-            >
-              {camOn ? "Cam On" : "Cam Off"}
-            </button>
-            <button
-              onClick={leaveSession}
-              className="px-4 py-2 rounded-md bg-red-600 text-white"
-            >
-              Leave
-            </button>
+          {/* Local Video */}
+          <div className="relative w-48 h-36 rounded-md overflow-hidden border-2 border-gray-700 shadow-lg">
+            <video ref={localVideoRef} autoPlay muted playsInline className="w-full h-full object-cover" />
+            <div className="absolute bottom-1 left-1 flex gap-1">
+              <button
+                onClick={toggleMic}
+                className={`px-2 py-1 text-xs rounded-md text-white ${micOn ? "bg-green-600" : "bg-red-600"}`}
+              >
+                {micOn ? "Mic On" : "Mic Off"}
+              </button>
+              <button
+                onClick={toggleCam}
+                className={`px-2 py-1 text-xs rounded-md text-white ${camOn ? "bg-green-600" : "bg-red-600"}`}
+              >
+                {camOn ? "Cam On" : "Cam Off"}
+              </button>
+            </div>
           </div>
         </div>
+      </div>
 
-        <div className="flex-1 rounded-lg border bg-gray-900 shadow-sm p-4">
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-full rounded-md bg-black"
+      {/* Chat Panel */}
+      <div className="w-96 bg-gray-800 flex flex-col h-screen p-4 mt-[64px]">
+        <h2 className="text-white text-lg font-semibold mb-4">Chat</h2>
+        <div className="flex-1 overflow-y-auto flex flex-col gap-2">
+          {messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`p-2 rounded-lg max-w-[75%] break-words ${
+                msg.sender === (isTutor ? "Tutor" : "Student")
+                  ? "bg-blue-600 text-white self-end ml-auto"
+                  : "bg-gray-700 text-white self-start"
+              }`}
+            >
+              <span className="font-semibold">{msg.sender}: </span>
+              {msg.text}
+            </div>
+          ))}
+          <div ref={chatEndRef} />
+        </div>
+        <div className="flex gap-2 mt-2">
+          <input
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            className="flex-1 px-3 py-2 rounded-md bg-gray-700 text-white outline-none"
+            placeholder="Type a message..."
           />
+          <button
+            onClick={sendMessage}
+            className="px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-500"
+          >
+            Send
+          </button>
         </div>
       </div>
     </main>
