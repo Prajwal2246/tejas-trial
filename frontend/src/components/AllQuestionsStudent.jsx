@@ -2,29 +2,50 @@ import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { useAuth } from "../context/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from "firebase/firestore";
+import { db } from "../firebase";
 
-const timeAgo = (date) => {
-  const diff = Math.floor((Date.now() - new Date(date)) / 1000);
+/* 🔹 Firestore-safe timeAgo */
+const timeAgo = (timestamp) => {
+  if (!timestamp) return "Just now";
+
+  const date = timestamp.toDate(); // 🔥 Firestore Timestamp → Date
+  const diff = Math.floor((Date.now() - date) / 1000);
+
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   return `${Math.floor(diff / 3600)} hrs ago`;
 };
 
 export default function AllQuestionsStudent() {
-  const { user } = useAuth(); // ✅ current student
+  const { user } = useAuth();
   const [questions, setQuestions] = useState([]);
 
   useEffect(() => {
     if (!user) return;
 
-    const allQuestions =
-      JSON.parse(localStorage.getItem("questions")) || [];
-
-    const myQuestions = allQuestions.filter(
-      (q) => q.studentId === user.uid // ✅ FILTER
+    const q = query(
+      collection(db, "questions"),
+      where("studentId", "==", user.uid),
+      orderBy("createdAt", "desc")
     );
 
-    setQuestions(myQuestions);
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id, // 🔥 Firestore document id
+        ...doc.data(),
+      }));
+
+      setQuestions(data);
+    });
+
+    return () => unsubscribe();
   }, [user]);
 
   return (
@@ -46,6 +67,7 @@ export default function AllQuestionsStudent() {
               shadow-xl p-8
             "
           >
+            {/* Time badge */}
             <div className="absolute top-5 right-5">
               <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 text-[11px] font-medium border border-indigo-500/20">
                 <Clock size={12} />
