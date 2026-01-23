@@ -19,9 +19,9 @@ const timeAgo = (timestamp) => {
 };
 
 export default function TutorQuestionDetail() {
-  const { id } = useParams(); // Firestore doc id
+  const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth(); // logged-in tutor
+  const { user } = useAuth();
 
   const [question, setQuestion] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -46,21 +46,30 @@ export default function TutorQuestionDetail() {
     fetchQuestion();
   }, [id]);
 
-  const acceptQuestion = () => {
-    const questions = JSON.parse(localStorage.getItem("questions")) || [];
-    const updated = questions.map((q) =>
-      q.id === Number(id) ? { ...q, status: "accepted", acceptedBy: "tutor-1" } : q
-    );
-    localStorage.setItem("questions", JSON.stringify(updated));
-    navigate("/all-question-tutor");
+  /* 🔹 Accept question (Firestore) */
+  const acceptQuestion = async () => {
+    if (!user) return;
+
+    try {
+      const ref = doc(db, "questions", id);
+
+      await updateDoc(ref, {
+        status: "accepted",
+        acceptedBy: user.uid,
+        acceptedAt: serverTimestamp(),
+      });
+
+      navigate("/all-question-tutor");
+    } catch (error) {
+      console.error("Error accepting question:", error);
+    }
   };
 
+  if (loading)
+    return <p className="text-white p-10 text-center">Loading...</p>;
+
   if (!question)
-    return (
-      <p className="text-red-400 p-10 text-center">
-        Question not found
-      </p>
-    );
+    return <p className="text-red-400 p-10 text-center">Question not found</p>;
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center p-6 space-y-6">
@@ -84,49 +93,50 @@ export default function TutorQuestionDetail() {
           rounded-3xl border border-white/20
           bg-zinc-900/70 backdrop-blur-xl
           shadow-2xl p-10 space-y-8
-          relative overflow-hidden
         "
       >
-        <div className="relative z-10 space-y-6">
-          {/* Header */}
-          <div className="flex justify-between items-start">
-            <h2 className="text-4xl font-bold text-white tracking-tight">
-              {question.title}
-            </h2>
-            <div className="flex items-center gap-2 text-sm text-indigo-400 font-medium">
-              <Clock size={16} />
-              {timeAgo(question.createdAt)}
-            </div>
+        {/* Header */}
+        <div className="flex justify-between items-start">
+          <h2 className="text-4xl font-bold text-white">
+            {question.title}
+          </h2>
+          <div className="flex items-center gap-2 text-sm text-indigo-400">
+            <Clock size={16} />
+            {timeAgo(question.createdAt)}
           </div>
-
-          {/* Description */}
-          <p className="text-zinc-300 text-lg leading-relaxed">
-            {question.description}
-          </p>
-
-          {/* Student Info */}
-          <p className="text-sm text-zinc-500">
-            Asked by:{" "}
-            <span className="text-white font-semibold">
-              {question.studentName || "Anonymous"}
-            </span>
-          </p>
-
-          {/* Accept Action */}
-          {question.status === "open" ? (
-            <button
-              onClick={acceptQuestion}
-              className="relative inline-flex items-center px-8 py-3 bg-green-500 text-white font-semibold rounded-xl shadow-lg hover:bg-green-600 hover:scale-105 transition-transform active:scale-95 overflow-hidden group"
-            >
-              <span className="absolute inset-0 bg-white/10 rounded-xl blur-sm opacity-0 group-hover:opacity-30 transition-opacity"></span>
-              Accept Question & Start Session
-            </button>
-          ) : (
-            <span className="inline-block px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 font-semibold">
-              Already Accepted
-            </span>
-          )}
         </div>
+
+        <p className="text-zinc-300 text-lg">
+          {question.description}
+        </p>
+
+        <p className="text-sm text-zinc-500">
+          Asked by{" "}
+          <span className="text-white font-semibold">
+            {question.studentName || "Anonymous"}
+          </span>
+        </p>
+
+        {question.status === "open" ? (
+          <button
+            onClick={acceptQuestion}
+            className="
+              inline-flex items-center
+              px-8 py-3
+              bg-green-500 text-white
+              font-semibold rounded-xl
+              shadow-lg
+              hover:bg-green-600 hover:scale-105
+              transition-transform active:scale-95
+            "
+          >
+            Accept Question & Start Session
+          </button>
+        ) : (
+          <span className="inline-block px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 font-semibold">
+            Already Accepted
+          </span>
+        )}
       </motion.div>
     </div>
   );
