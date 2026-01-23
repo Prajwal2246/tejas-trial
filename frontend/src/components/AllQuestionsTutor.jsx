@@ -19,12 +19,32 @@ const timeAgo = (timestamp) => {
   const date = timestamp.toDate();
   const diff = Math.floor((Date.now() - date) / 1000);
 
+import { useAuth } from "../context/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from "firebase/firestore";
+import { db } from "../firebase";
+
+/* 🔹 Firestore-safe timeAgo */
+const timeAgo = (timestamp) => {
+  if (!timestamp) return "Just now";
+
+  const date = timestamp.toDate();
+  const diff = Math.floor((Date.now() - date) / 1000);
+
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   return `${Math.floor(diff / 3600)} hrs ago`;
 };
 
 export default function AllQuestionsTutor() {
+  const { user } = useAuth(); // ✅ logged-in tutor
+  const [open, setOpen] = useState([]);
+  const [accepted, setAccepted] = useState([]);
   const { user } = useAuth(); // ✅ logged-in tutor
   const [open, setOpen] = useState([]);
   const [accepted, setAccepted] = useState([]);
@@ -36,7 +56,8 @@ export default function AllQuestionsTutor() {
     /* 🔹 Open questions */
     const openQuery = query(
       collection(db, "questions"),
-      where("status", "==", "open")
+      where("status", "==", "open"),
+      orderBy("createdAt", "desc")
     );
 
     /* 🔹 Accepted by this tutor */
