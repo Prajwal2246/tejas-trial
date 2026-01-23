@@ -4,58 +4,74 @@ import {
   collection,
   doc,
   getDoc,
-  addDoc,
-  onSnapshot,
   setDoc,
   updateDoc,
+  addDoc,
+  onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
-export default function VideoSession({ headerHeight = "h-16", isTutor = false }) {
+export default function VideoSession({ headerHeight = "h-16", isTutor = true }) {
   const { roomId } = useParams();
   const navigate = useNavigate();
 
+  // ---------------- Refs ----------------
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const localStreamRef = useRef(null);
   const pc = useRef(null);
-  const isMountedRef = useRef(true);
   const unsubscribers = useRef([]);
+  const chatEndRef = useRef(null);
+  const joinTimeoutRef = useRef(null);
 
+  // ---------------- State ----------------
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
   const [callStarted, setCallStarted] = useState(false);
-
+  const [studentJoined, setStudentJoined] = useState(false);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState("");
-  const chatEndRef = useRef(null);
+  const [studentId, setStudentId] = useState(null);
 
-  // ================= Helper =================
+  // ---------------- Helpers ----------------
   const stopMediaStream = (stream) => {
     if (stream) stream.getTracks().forEach((track) => (track.stop(), (track.enabled = false)));
   };
 
-  const scrollToBottom = () => {
-    if (chatEndRef.current) chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+  const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+  const toggleMic = () => {
+    if (!localStreamRef.current) return;
+    localStreamRef.current.getAudioTracks().forEach((track) => {
+      track.enabled = !track.enabled;
+      setMicOn(track.enabled);
+    });
   };
 
-  // ================= Media =================
+  const toggleCam = () => {
+    if (!localStreamRef.current) return;
+    localStreamRef.current.getVideoTracks().forEach((track) => {
+      track.enabled = !track.enabled;
+      setCamOn(track.enabled);
+    });
+  };
+
+  const leaveSession = () => navigate("/"); // redirect to homepage
+
+  // ---------------- Media Setup ----------------
   const setupMedia = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-      if (!isMountedRef.current) {
-        stopMediaStream(stream);
-        return null;
-      }
-      if (localStreamRef.current) stopMediaStream(localStreamRef.current);
-
       localStreamRef.current = stream;
       if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
       pc.current = new RTCPeerConnection({ iceServers: [{ urls: "stun:stun.l.google.com:19302" }] });
       stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
-      pc.current.ontrack = (e) => remoteVideoRef.current && (remoteVideoRef.current.srcObject = e.streams[0]);
+
+      pc.current.ontrack = (e) => {
+        if (remoteVideoRef.current) remoteVideoRef.current.srcObject = e.streams[0];
+      };
 
       return stream;
     } catch (err) {
@@ -64,7 +80,7 @@ export default function VideoSession({ headerHeight = "h-16", isTutor = false })
     }
   };
 
-  // ================= Chat =================
+  // ---------------- Chat ----------------
   const setupChatListener = () => {
     const messagesCol = collection(db, "calls", roomId, "messages");
     unsubscribers.current.push(
@@ -89,47 +105,89 @@ export default function VideoSession({ headerHeight = "h-16", isTutor = false })
     setNewMessage("");
   };
 
-  // ================= Peer =================
-  const startOrJoinCall = async () => {
-    if (!isMountedRef.current) return;
+  // ---------------- Tutor: Start Call ----------------
+  const startCallToStudent = async () => {
+    const callDocRef = doc(db, "calls", roomId);
+    const callSnap = await getDoc(callDocRef);
+    const callData = callSnap.data();
 
+    if (!callData?.studentId) {
+      alert("No student has requested this session.");
+      return;
+    }
+
+    setStudentId(callData.studentId);
+    await setupMedia();
+    setCallStarted(true);
+
+    // Create offer
+    const offer = await pc.current.createOffer();
+    await pc.current.setLocalDescription(offer);
+
+    await setDoc(callDocRef, {
+      tutorId: "currentTutorId",
+      studentId: callData.studentId,
+      studentJoined: false,
+      offer: { type: offer.type, sdp: offer.sdp },
+    });
+
+    // ICE candidates
+    const offerCandidates = collection(callDocRef, "offerCandidates");
+    pc.current.onicecandidate = (e) => e.candidate && addDoc(offerCandidates, e.candidate.toJSON());
+
+    // Listen for student joining
+    unsubscribers.current.push(
+      onSnapshot(callDocRef, async (snap) => {
+        const data = snap.data();
+        if (!data) return;
+
+        if (data.studentJoined && !studentJoined) {
+          console.log("Student has joined!");
+          setStudentJoined(true);
+          clearTimeout(joinTimeoutRef.current);
+
+          if (data.answer) pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+
+          setupChatListener();
+        }
+      })
+    );
+
+    // 60s timeout
+    joinTimeoutRef.current = setTimeout(() => {
+      if (!studentJoined) {
+        alert("Student did not join in 60 seconds. Redirecting...");
+        leaveSession();
+      }
+    }, 60000);
+  };
+
+  // ---------------- Student: Join Call ----------------
+  const studentJoinCall = async () => {
     const stream = await setupMedia();
     if (!stream) return;
 
-    const callDoc = doc(db, "calls", roomId);
-    const offerCandidates = collection(callDoc, "offerCandidates");
-    const answerCandidates = collection(callDoc, "answerCandidates");
+    const callDocRef = doc(db, "calls", roomId);
+    const callSnap = await getDoc(callDocRef);
+    const callData = callSnap.data();
 
-    if (!pc.current) return;
-
-    pc.current.onicecandidate = (e) => e.candidate && addDoc(offerCandidates, e.candidate.toJSON());
-
-    const callData = (await getDoc(callDoc)).data();
-
-    // Tutor initiates call
-    if (isTutor && callStarted) {
-      const offer = await pc.current.createOffer();
-      await pc.current.setLocalDescription(offer);
-      await setDoc(callDoc, { offer: { type: offer.type, sdp: offer.sdp } });
-
-      unsubscribers.current.push(
-        onSnapshot(callDoc, (snap) => {
-          const data = snap.data();
-          if (pc.current && data?.answer && !pc.current.currentRemoteDescription)
-            pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-        })
-      );
-    } else if (!isTutor && callData?.offer) {
-      // Student joins automatically when offer exists
-      await pc.current.setRemoteDescription(new RTCSessionDescription(callData.offer));
-      const answer = await pc.current.createAnswer();
-      await pc.current.setLocalDescription(answer);
-      await updateDoc(callDoc, { answer: { type: answer.type, sdp: answer.sdp } });
+    if (!callData?.offer) {
+      alert("Tutor has not started the call yet.");
+      return;
     }
 
-    const candidateCollection = !callData?.offer ? answerCandidates : offerCandidates;
+    // Mark student joined
+    await updateDoc(callDocRef, { studentJoined: true });
+
+    await pc.current.setRemoteDescription(new RTCSessionDescription(callData.offer));
+    const answer = await pc.current.createAnswer();
+    await pc.current.setLocalDescription(answer);
+    await updateDoc(callDocRef, { answer: { type: answer.type, sdp: answer.sdp } });
+
+    // Listen for ICE
+    const offerCandidates = collection(callDocRef, "offerCandidates");
     unsubscribers.current.push(
-      onSnapshot(candidateCollection, (snap) => {
+      onSnapshot(offerCandidates, (snap) => {
         snap.docChanges().forEach((c) => {
           if (c.type === "added") pc.current.addIceCandidate(new RTCIceCandidate(c.doc.data()));
         });
@@ -139,6 +197,7 @@ export default function VideoSession({ headerHeight = "h-16", isTutor = false })
     setupChatListener();
   };
 
+  // ---------------- Stop Session ----------------
   const stopSession = () => {
     if (localStreamRef.current) stopMediaStream(localStreamRef.current);
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
@@ -146,45 +205,25 @@ export default function VideoSession({ headerHeight = "h-16", isTutor = false })
     if (pc.current) pc.current.close();
     unsubscribers.current.forEach((unsub) => unsub());
     unsubscribers.current = [];
+    clearTimeout(joinTimeoutRef.current);
   };
 
-  const toggleMic = () => {
-    if (!localStreamRef.current) return;
-    localStreamRef.current.getAudioTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-      setMicOn(track.enabled);
-    });
-  };
-
-  const toggleCam = () => {
-    if (!localStreamRef.current) return;
-    localStreamRef.current.getVideoTracks().forEach((track) => {
-      track.enabled = !track.enabled;
-      setCamOn(track.enabled);
-    });
-  };
-
-  const leaveSession = () => navigate(-1);
-
+  // ---------------- Lifecycle ----------------
   useEffect(() => {
-    isMountedRef.current = true;
-    if (!isTutor) startOrJoinCall(); // Students auto-join
-    return () => {
-      isMountedRef.current = false;
-      stopSession();
-    };
+    if (!isTutor) studentJoinCall();
+    return () => stopSession();
   }, []);
 
-  // ================= JSX =================
+  // ---------------- JSX ----------------
   return (
     <main className="flex bg-gray-900 min-h-screen">
-      {/* Video + Call */}
+      {/* Video Section */}
       <div className="flex-1 flex flex-col p-4 mt-[64px] relative">
-        {/* Call Button for Tutor */}
+        {/* Tutor Call Button */}
         {isTutor && !callStarted && (
           <button
-            onClick={() => { setCallStarted(true); startOrJoinCall(); }}
-            className="mb-4 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-500 self-start"
+            onClick={startCallToStudent}
+            className="mb-4 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-500 self-start z-50"
           >
             Call Student
           </button>

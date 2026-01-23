@@ -2,7 +2,14 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Clock, ArrowLeft } from "lucide-react";
-import { doc, getDoc, updateDoc, serverTimestamp, collection, setDoc } from "firebase/firestore";
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  serverTimestamp,
+  collection,
+  setDoc,
+} from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
@@ -49,11 +56,15 @@ export default function TutorQuestionDetail() {
     setAccepting(true);
 
     try {
-      // 1️⃣ Create Firestore call room
+      // 1️⃣ Create Firestore call room with student info
       const callDocRef = doc(collection(db, "calls"));
-      await setDoc(callDocRef, { createdAt: serverTimestamp() });
+      await setDoc(callDocRef, {
+        createdAt: serverTimestamp(),
+        studentId: question.studentId,
+        studentName: question.studentName || "Anonymous",
+      });
 
-      // 2️⃣ Update question in Firestore
+      // 2️⃣ Update question
       const questionRef = doc(db, "questions", id);
       await updateDoc(questionRef, {
         status: "accepted",
@@ -71,15 +82,10 @@ export default function TutorQuestionDetail() {
     }
   };
 
-  if (loading)
-    return (
-      <p className="text-white p-10 text-center">Loading...</p>
-    );
+  if (loading) return <p className="text-white p-10 text-center">Loading...</p>;
 
   if (!question)
-    return (
-      <p className="text-red-400 p-10 text-center">Question not found</p>
-    );
+    return <p className="text-red-400 p-10 text-center">Question not found</p>;
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center p-6 space-y-6">
