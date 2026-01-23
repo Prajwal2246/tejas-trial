@@ -256,7 +256,7 @@ export default function VideoSession({ headerHeight = "h-16", isTutor = true }) 
       </div>
 
       {/* Chat Panel */}
-      <div className="w-96 bg-gray-800 flex flex-col h-screen p-4 mt-[64px]">
+      <div className="w-96 bg-gray-800 flex flex-col h-96 p-4 mt-[64px]">
         <h2 className="text-white text-lg font-semibold mb-4">Chat</h2>
         <div className="flex-1 overflow-y-auto flex flex-col gap-2">
           {messages.map((msg) => (
