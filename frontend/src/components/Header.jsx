@@ -92,41 +92,42 @@ const Header = () => {
                   <span className="text-white font-semibold">{user.name}</span>
                 </span>
 
-                <button
-                  onClick={handleLogout}
-                  className="cursor-pointer px-4 py-2 rounded-full border border-red-500/40 text-red-400 hover:bg-red-500/10 transition"
-                >
-                  Logout
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={() => navigate("/login")}
-                  className="text-sm font-semibold text-slate-300 hover:text-white"
-                >
-                  Log in
-                </button>
+								<button
+									onClick={handleLogout}
+									className="cursor-pointer px-4 py-2 rounded-full border border-red-500/40 text-red-400 hover:bg-red-500/10 transition"
+								>
+									Logout
+								</button>
+							</>
+						:	<>
+								<button
+									onClick={() => navigate("/login")}
+									className="cursor-pointer text-sm font-semibold text-slate-300 hover:text-white"
+								>
+									Log in
+								</button>
 
-                <button
-                  onClick={() => navigate("/signup")}
-                  className="px-5 py-2.5 rounded-full bg-white text-black font-bold"
-                >
-                  Get Started
-                </button>
-              </>
-            )}
-          </div>
+								<button
+									onClick={() => navigate("/signup")}
+									className="cursor-pointer px-5 py-2.5 rounded-full bg-white text-black font-bold"
+								>
+									Get Started
+								</button>
+							</>
+						}
+					</div>
 
-          {/* 4. MOBILE TOGGLE */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="md:hidden p-2 text-slate-300 hover:text-white transition-colors"
-          >
-            {mobileMenuOpen ? <X /> : <Menu />}
-          </button>
-        </div>
-      </motion.header>
+					{/* 4. MOBILE TOGGLE */}
+					<button
+						onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+						className="cursor-pointer md:hidden p-2 text-slate-300 hover:text-white transition-colors"
+					>
+						{mobileMenuOpen ?
+							<X />
+						:	<Menu />}
+					</button>
+				</div>
+			</motion.header>
 
       {/* 5. MOBILE MENU OVERLAY */}
       <AnimatePresence>
@@ -161,37 +162,36 @@ const Header = () => {
                       👋 {user.name}
                     </p>
 
-                    <button
-                      onClick={handleLogout}
-                      className="cursor-pointer w-full py-4 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
-                    >
-                      Logout
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      onClick={() => navigate("/login")}
-                      className="w-full py-4 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5 transition-colors"
-                    >
-                      Log In
-                    </button>
+										<button
+											onClick={handleLogout}
+											className="cursor-pointer w-full py-4 rounded-xl border border-red-500/40 text-red-400 hover:bg-red-500/10 transition-colors"
+										>
+											Logout
+										</button>
+									</>
+								:	<>
+										<button
+											onClick={() => navigate("/login")}
+											className="cursor-pointer w-full py-4 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5 transition-colors"
+										>
+											Log In
+										</button>
 
-                    <button
-                      onClick={() => navigate("/signup")}
-                      className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-lg shadow-blue-500/20"
-                    >
-                      Sign Up
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </>
-  );
+										<button
+											onClick={() => navigate("/signup")}
+											className="cursor-pointer w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-lg shadow-blue-500/20"
+										>
+											Sign Up
+										</button>
+									</>
+								}
+							</div>
+						</div>
+					</motion.div>
+				)}
+			</AnimatePresence>
+		</>
+	);
 };
 
 export default Header;
