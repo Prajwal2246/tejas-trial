@@ -3,6 +3,9 @@ import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
 import { Send, HelpCircle, FileText, Hash, Sparkles } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "../firebase"; // adjust path if needed
+
 
 export default function AskQuestion() {
   const navigate = useNavigate();
@@ -22,32 +25,32 @@ export default function AskQuestion() {
     mouseY.set(clientY - top);
   }
 
-  const handleSubmit = () => {
-    if (!subject || !details || !user) return; // ensure user is logged in
+  const handleSubmit = async () => {
+  if (!subject || !details || !user) return;
 
-    setIsSubmitting(true);
+  setIsSubmitting(true);
 
-    const newQuestion = {
-      id: Date.now(),
+  try {
+    await addDoc(collection(db, "questions"), {
       title: subject,
       description: details,
-      createdAt: new Date().toISOString(),
       status: "open",
       acceptedBy: null,
-      studentId: user.uid,      // ✅ associate question with student
-      studentName: user.name,   // optional
-    };
 
-    const existing = JSON.parse(localStorage.getItem("questions")) || [];
-    localStorage.setItem(
-      "questions",
-      JSON.stringify([newQuestion, ...existing])
-    );
+      studentId: user.uid,
+      studentName: user.name || "Anonymous",
 
-    setTimeout(() => {
-      navigate("/all-question-student");
-    }, 600);
-  };
+      createdAt: serverTimestamp(), // 🔥 Firestore timestamp
+    });
+
+    navigate("/all-question-student");
+  } catch (error) {
+    console.error("Error posting question:", error);
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   return (
     <div
