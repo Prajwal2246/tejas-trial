@@ -81,7 +81,7 @@ function StudentHomePage() {
   );
 }
 
-const ActionCard = ({ icon, title, desc, onClick, delay,label }) => {
+const ActionCard = ({ icon, title, desc, onClick, delay, label }) => {
   return (
     <motion.div
       variants={{
@@ -89,8 +89,13 @@ const ActionCard = ({ icon, title, desc, onClick, delay,label }) => {
         show: { opacity: 1, y: 0 }
       }}
       whileHover={{ y: -5, transition: { duration: 0.2 } }}
-      onClick={()=>navigate("/all-question-student")}
-      className="group relative p-6 rounded-2xl bg-slate-900/50 border border-white/10 hover:border-blue-500/50 cursor-pointer transition-colors overflow-hidden"
+      onClick={onClick}   // ✅ USE PROP
+      className="
+        group relative p-6 rounded-2xl
+        bg-slate-900/50 border border-white/10
+        hover:border-blue-500/50 cursor-pointer
+        transition-colors overflow-hidden
+      "
     >
       <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
       
@@ -98,15 +103,22 @@ const ActionCard = ({ icon, title, desc, onClick, delay,label }) => {
         <div className="p-3 rounded-lg bg-slate-800/50 mb-4 group-hover:bg-slate-800 transition-colors">
           {icon}
         </div>
-        <h3 className="text-xl font-semibold text-white mb-2">{title}</h3>
-        <p className="text-slate-400 text-sm mb-6 flex-1">{desc}</p>
+
+        <h3 className="text-xl font-semibold text-white mb-2">
+          {title}
+        </h3>
+
+        <p className="text-slate-400 text-sm mb-6 flex-1">
+          {desc}
+        </p>
         
         <div className="flex items-center text-blue-400 text-sm font-medium group-hover:translate-x-1 transition-transform">
           {label} <ArrowRight className="w-4 h-4 ml-1" />
         </div>
       </div>
     </motion.div>
-  )
-}
+  );
+};
+
 
 export default StudentHomePage;

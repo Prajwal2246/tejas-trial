@@ -2,24 +2,75 @@ import { useEffect, useState } from "react";
 import { Clock } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from "firebase/firestore";
+import { db } from "../firebase";
 
-const timeAgo = (date) => {
-  const diff = Math.floor((Date.now() - new Date(date)) / 1000);
+/* 🔹 Firestore-safe timeAgo */
+const timeAgo = (timestamp) => {
+  if (!timestamp) return "Just now";
+
+  const date = timestamp.toDate();
+  const diff = Math.floor((Date.now() - date) / 1000);
+
   if (diff < 60) return "Just now";
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`;
   return `${Math.floor(diff / 3600)} hrs ago`;
 };
 
 export default function AllQuestionsTutor() {
-  const [questions, setQuestions] = useState([]);
+  const { user } = useAuth(); // ✅ logged-in tutor
+  const [open, setOpen] = useState([]);
+  const [accepted, setAccepted] = useState([]);
   const navigate = useNavigate();
 
   useEffect(() => {
-    setQuestions(JSON.parse(localStorage.getItem("questions")) || []);
-  }, []);
+    if (!user) return;
 
-  const open = questions.filter((q) => q.status === "open");
-  const accepted = questions.filter((q) => q.status === "accepted" && q.acceptedBy === "tutor-1"); // Hardcoded tutor
+    /* 🔹 Open questions */
+    const openQuery = query(
+      collection(db, "questions"),
+      where("status", "==", "open"),
+      orderBy("createdAt", "desc")
+    );
+
+    /* 🔹 Accepted by this tutor */
+    const acceptedQuery = query(
+      collection(db, "questions"),
+      where("status", "==", "accepted"),
+      where("acceptedBy", "==", user.uid),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsubOpen = onSnapshot(openQuery, (snapshot) => {
+      setOpen(
+        snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+      );
+    });
+
+    const unsubAccepted = onSnapshot(acceptedQuery, (snapshot) => {
+      setAccepted(
+        snapshot.docs.map((doc) => ({
+          id: doc.id,
+          ...doc.data(),
+        }))
+      );
+    });
+
+    return () => {
+      unsubOpen();
+      unsubAccepted();
+    };
+  }, [user]);
 
   return (
     <div className="min-h-screen bg-black px-6 py-20">
@@ -30,6 +81,7 @@ export default function AllQuestionsTutor() {
       {/* OPEN QUESTIONS */}
       <section className="mb-20">
         <h2 className="text-2xl text-white mb-6">Open Questions</h2>
+
         <div className="flex flex-wrap gap-8">
           {open.map((q) => (
             <motion.div
@@ -51,18 +103,20 @@ export default function AllQuestionsTutor() {
                   bg-indigo-500/10 text-indigo-400
                   text-[11px] font-medium
                   border border-indigo-500/20
-                  backdrop-blur
                 ">
                   <Clock size={12} />
                   {timeAgo(q.createdAt)}
                 </div>
               </div>
 
-              {/* TITLE */}
-              <h2 className="text-xl text-white font-semibold pr-20">{q.title}</h2>
-              <p className="mt-4 text-sm text-zinc-300 line-clamp-3">{q.description}</p>
+              <h2 className="text-xl text-white font-semibold pr-20">
+                {q.title}
+              </h2>
 
-              {/* VIEW BUTTON */}
+              <p className="mt-4 text-sm text-zinc-300 line-clamp-3">
+                {q.description}
+              </p>
+
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => navigate(`/tutor/question/${q.id}`)}
@@ -73,12 +127,19 @@ export default function AllQuestionsTutor() {
               </div>
             </motion.div>
           ))}
+
+          {open.length === 0 && (
+            <p className="text-zinc-500 w-full">
+              No open questions right now.
+            </p>
+          )}
         </div>
       </section>
 
       {/* ACCEPTED QUESTIONS */}
       <section>
         <h2 className="text-2xl text-white mb-6">Accepted Questions</h2>
+
         {accepted.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-zinc-900/40 p-10 text-center text-zinc-500">
             No accepted questions yet
@@ -107,8 +168,14 @@ export default function AllQuestionsTutor() {
                     Accepted
                   </div>
                 </div>
-                <h2 className="text-xl text-white font-semibold pr-20">{q.title}</h2>
-                <p className="mt-4 text-sm text-zinc-300">{q.description}</p>
+
+                <h2 className="text-xl text-white font-semibold pr-20">
+                  {q.title}
+                </h2>
+
+                <p className="mt-4 text-sm text-zinc-300">
+                  {q.description}
+                </p>
               </motion.div>
             ))}
           </div>
