@@ -103,14 +103,14 @@ const Header = () => {
 						:	<>
 								<button
 									onClick={() => navigate("/login")}
-									className="text-sm font-semibold text-slate-300 hover:text-white"
+									className="cursor-pointer text-sm font-semibold text-slate-300 hover:text-white"
 								>
 									Log in
 								</button>
 
 								<button
 									onClick={() => navigate("/signup")}
-									className="px-5 py-2.5 rounded-full bg-white text-black font-bold"
+									className="cursor-pointer px-5 py-2.5 rounded-full bg-white text-black font-bold"
 								>
 									Get Started
 								</button>
@@ -121,7 +121,7 @@ const Header = () => {
 					{/* 4. MOBILE TOGGLE */}
 					<button
 						onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-						className="md:hidden p-2 text-slate-300 hover:text-white transition-colors"
+						className="cursor-pointer md:hidden p-2 text-slate-300 hover:text-white transition-colors"
 					>
 						{mobileMenuOpen ?
 							<X />
@@ -172,14 +172,14 @@ const Header = () => {
 								:	<>
 										<button
 											onClick={() => navigate("/login")}
-											className="w-full py-4 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5 transition-colors"
+											className="cursor-pointer w-full py-4 rounded-xl border border-white/10 text-white font-semibold hover:bg-white/5 transition-colors"
 										>
 											Log In
 										</button>
 
 										<button
 											onClick={() => navigate("/signup")}
-											className="w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-lg shadow-blue-500/20"
+											className="cursor-pointer w-full py-4 rounded-xl bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-bold shadow-lg shadow-blue-500/20"
 										>
 											Sign Up
 										</button>

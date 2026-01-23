@@ -245,7 +245,7 @@ function Signup() {
 							<button
 								type="button"
 								onClick={() => setRole("Student")}
-								className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold ${
+								className={`cursor-pointer relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold ${
 									role === "Student" ? "text-white" : "text-slate-500"
 								}`}
 							>
@@ -254,7 +254,7 @@ function Signup() {
 							<button
 								type="button"
 								onClick={() => setRole("Tutor")}
-								className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold ${
+								className={`cursor-pointer relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold ${
 									role === "Tutor" ? "text-white" : "text-slate-500"
 								}`}
 							>
@@ -330,7 +330,7 @@ function Signup() {
 							whileHover={{ scale: 1.05 }}
 							whileTap={{ scale: 0.95 }}
 							type="submit"
-							className="w-full py-4 bg-white text-black font-bold rounded-xl shadow-lg"
+							className="cursor-pointer w-full py-4 bg-white text-black font-bold rounded-xl shadow-lg"
 						>
 							INITIATE SEQUENCE{" "}
 							<ArrowRight className="inline ml-2" size={18} />
@@ -342,7 +342,7 @@ function Signup() {
 							Already initialized?{" "}
 							<button
 								onClick={() => navigate("/login")}
-								className="text-white hover:text-amber-400 underline"
+								className="cursor-pointer text-white hover:text-amber-400 underline"
 							>
 								Access Login
 							</button>
