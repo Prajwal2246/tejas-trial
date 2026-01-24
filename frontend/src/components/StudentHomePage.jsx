@@ -62,7 +62,7 @@ function StudentHomePage() {
           title="My Questions"
           desc="View responses and pending queries."
           label="View My Questions"
-          onClick={() => navigate("/dashboard")} // Ensure this route exists
+          onClick={() => navigate("/all-question-student")} // Ensure this route exists
           delay={0.1}
         />
 
@@ -72,7 +72,7 @@ function StudentHomePage() {
           title="Session History"
           desc="Revisit your past learning sessions."
           label="View Sessions"
-          onClick={() => navigate("/sessions")} // Ensure this route exists
+          onClick={() => navigate("/student-session-history")} // Ensure this route exists
           delay={0.2}
         />
       </motion.div>

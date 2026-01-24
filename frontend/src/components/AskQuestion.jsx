@@ -6,7 +6,6 @@ import { useAuth } from "../context/AuthContext";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { db } from "../firebase"; // adjust path if needed
 
-
 export default function AskQuestion() {
   const navigate = useNavigate();
   const { user } = useAuth(); // ✅ get logged-in user
@@ -26,31 +25,30 @@ export default function AskQuestion() {
   }
 
   const handleSubmit = async () => {
-  if (!subject || !details || !user) return;
+    if (!subject || !details || !user) return;
 
-  setIsSubmitting(true);
+    setIsSubmitting(true);
 
-  try {
-    await addDoc(collection(db, "questions"), {
-      title: subject,
-      description: details,
-      status: "open",
-      acceptedBy: null,
+    try {
+      await addDoc(collection(db, "questions"), {
+        title: subject,
+        description: details,
+        status: "open",
+        acceptedBy: null,
 
-      studentId: user.uid,
-      studentName: user.name || "Anonymous",
+        studentId: user.uid,
+        studentName: user.name || "Anonymous",
 
-      createdAt: serverTimestamp(), // 🔥 Firestore timestamp
-    });
+        createdAt: serverTimestamp(), // 🔥 Firestore timestamp
+      });
 
-    navigate("/all-question-student");
-  } catch (error) {
-    console.error("Error posting question:", error);
-  } finally {
-    setIsSubmitting(false);
-  }
-};
-
+      navigate("/all-question-student");
+    } catch (error) {
+      console.error("Error posting question:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <div
@@ -79,7 +77,9 @@ export default function AskQuestion() {
               <HelpCircle className="text-white" />
             </div>
             <h2 className="text-2xl font-bold text-white">Ask a Question</h2>
-            <p className="text-zinc-400 text-sm">Get help from expert tutors.</p>
+            <p className="text-zinc-400 text-sm">
+              Get help from expert tutors.
+            </p>
             <div className="flex items-center gap-2 text-xs text-indigo-400">
               <Sparkles size={12} /> AI Assisted
             </div>
@@ -117,7 +117,7 @@ export default function AskQuestion() {
             {/* Action buttons */}
             <div className="flex justify-end gap-4">
               <button
-                onClick={() => navigate("/all-question-student")}
+                onClick={() => navigate("/student-home")}
                 className="text-sm  text-red-500 hover:text-red-600 cursor-pointer"
               >
                 Cancel

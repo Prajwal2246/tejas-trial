@@ -17,6 +17,7 @@ import TutorHomePage from "./components/TutorHomePage";
 import AskQuestion from "./components/AskQuestion";
 import AdminDashboard from "./components/AdminDashboard";
 import ProtectedRoute from "./components/ProtectedRoute";
+import TutorSessionHistory from "./components/TutorSessionHistory";
 
 // Footer Components
 import ContactSupport from "./components/FooterComponents/ContactSupport";
@@ -36,6 +37,7 @@ import AcceptQuestionPage from "./components/AcceptQuestionPage";
 import VideoSession from "./components/VideoSession";
 
 import "./App.css";
+import StudentSessionHistory from "./components/StudentSessionHistory";
 
 /* ================= ROOT AUTH HANDLER ================= */
 function RootAuthHandler() {
@@ -106,6 +108,22 @@ function App() {
           element: (
             <ProtectedRoute>
               <TutorHomePage />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "/tutor/session-history",
+          element: (
+            <ProtectedRoute>
+              <TutorSessionHistory />
+            </ProtectedRoute>
+          ),
+        },
+        {
+          path: "/student-session-history",
+          element: (
+            <ProtectedRoute>
+              <StudentSessionHistory />
             </ProtectedRoute>
           ),
         },

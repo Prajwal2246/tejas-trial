@@ -69,16 +69,20 @@ function Login() {
     } catch (err) {
       console.error(err);
 
-      if (err.code === "auth/user-not-found") {
-        setError("No account found with this email");
-      } else if (err.code === "auth/wrong-password") {
-        setError("Incorrect password");
-      } else if (err.code === "auth/invalid-email") {
+      if (err.code === "auth/invalid-email") {
         setError("Invalid email address");
+      } else if (err.code === "auth/wrong-password") {
+        setError("Invalid Password");
+      } else if (
+        err.code === "auth/invalid-credential" ||
+        err.code === "auth/wrong-password" ||
+        err.code === "auth/user-not-found"
+      ) {
+        setError("No User Found. Sign up first.");
       } else if (err.message === "TUTOR_NOT_APPROVED") {
         setError("Your tutor account is pending admin approval");
       } else {
-        setError("Login failed. Please try again.");
+        setError(`${err.code}`);
       }
     } finally {
       setLoading(false);
@@ -125,9 +129,6 @@ function Login() {
                 Back
               </span>
             </h2>
-            <p className="text-slate-500 text-sm mt-2 uppercase tracking-wide">
-              Enter the System
-            </p>
           </div>
 
           <form className="space-y-6" onSubmit={handleLogin}>
@@ -163,9 +164,10 @@ function Login() {
               whileTap={{ scale: 0.95 }}
               type="submit"
               disabled={loading}
-              className="w-full py-4 bg-white text-black font-bold rounded-xl disabled:opacity-60"
+              className="w-full py-4 bg-white text-black font-bold rounded-xl 
+             cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? "AUTHENTICATING..." : "AUTHENTICATE"}
+              {loading ? "AUTHENTICATING..." : "LOGIN"}
               <ArrowRight className="inline ml-2" size={18} />
             </motion.button>
           </form>
@@ -183,12 +185,12 @@ function Login() {
 
           <div className="mt-8 text-center">
             <p className="text-slate-500 text-sm">
-              No credentials?{" "}
+              No Account?{" "}
               <button
                 onClick={() => navigate("/signup")}
-                className="text-white hover:text-cyan-400 underline"
+                className="text-white hover:text-cyan-400 underline cursor-pointer"
               >
-                Initialize Sequence
+                Sign Up Here
               </button>
             </p>
           </div>

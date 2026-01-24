@@ -75,12 +75,7 @@ export default function AllQuestionsStudent() {
     <div className="min-h-screen bg-black px-6 py-20">
       <h1 className="text-4xl font-bold text-white mb-12">My Questions</h1>
 
-      {error && (
-        <div className="mb-8 p-4 bg-red-900/30 border border-red-500/50 rounded-xl flex items-center gap-3 text-red-200">
-          <AlertCircle className="shrink-0" />
-          <p>{error}</p>
-        </div>
-      )}
+      
 
       {loading ? (
         <div className="flex justify-center py-20 text-white">

@@ -225,9 +225,6 @@ function Signup() {
 								Account
 							</span>
 						</h2>
-						<p className="text-slate-500 text-sm mt-2 uppercase tracking-wide">
-							Join the Network
-						</p>
 					</div>
 
 					<form className="space-y-5" onSubmit={handleSubmit}>
@@ -245,7 +242,7 @@ function Signup() {
 							<button
 								type="button"
 								onClick={() => setRole("Student")}
-								className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold ${
+								className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold cursor-pointer ${
 									role === "Student" ? "text-white" : "text-slate-500"
 								}`}
 							>
@@ -254,7 +251,7 @@ function Signup() {
 							<button
 								type="button"
 								onClick={() => setRole("Tutor")}
-								className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold ${
+								className={`relative z-10 flex-1 flex items-center justify-center gap-2 py-2 text-sm font-semibold cursor-pointer ${
 									role === "Tutor" ? "text-white" : "text-slate-500"
 								}`}
 							>
@@ -330,21 +327,21 @@ function Signup() {
 							whileHover={{ scale: 1.05 }}
 							whileTap={{ scale: 0.95 }}
 							type="submit"
-							className="w-full py-4 bg-white text-black font-bold rounded-xl shadow-lg"
+							className="w-full py-4 bg-white text-black font-bold rounded-xl shadow-lg cursor-pointer"
 						>
-							INITIATE SEQUENCE{" "}
+						    SIGNUP{" "}
 							<ArrowRight className="inline ml-2" size={18} />
 						</motion.button>
 					</form>
 
 					<div className="mt-8 text-center">
 						<p className="text-slate-500 text-sm">
-							Already initialized?{" "}
+							Have an Existing Account?{" "}
 							<button
 								onClick={() => navigate("/login")}
-								className="text-white hover:text-amber-400 underline"
+								className="text-white hover:text-amber-400 underline cursor-pointer"
 							>
-								Access Login
+							   Login Here
 							</button>
 						</p>
 					</div>

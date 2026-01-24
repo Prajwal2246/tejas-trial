@@ -12,7 +12,7 @@ function TutorHomePage() {
     },
     {
       label: "My Sessions",
-      action: () => {},
+      action: () => navigate("/tutor/session-history"),
     },
     {
       label: "Payment History",
@@ -36,7 +36,7 @@ function TutorHomePage() {
         </div>
 
         <button
-          onClick={() => navigate("/all-questions-tutor")}
+          onClick={() => navigate("/all-question-tutor")}
           className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl
                      font-medium transition-all shadow-lg shadow-blue-500/25
                      active:scale-95"

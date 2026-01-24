@@ -8,7 +8,10 @@ import {
   query,
   where,
   orderBy,
+  doc,
+  updateDoc,
   onSnapshot,
+  serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -36,7 +39,7 @@ export default function AllQuestionsTutor() {
     /* 🔹 Open questions */
     const openQuery = query(
       collection(db, "questions"),
-      where("status", "==", "open")
+      where("status", "==", "open"),
     );
 
     /* 🔹 Accepted by this tutor */
@@ -44,7 +47,7 @@ export default function AllQuestionsTutor() {
       collection(db, "questions"),
       where("status", "==", "accepted"),
       where("acceptedBy", "==", user.uid),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
 
     const unsubOpen = onSnapshot(openQuery, (snapshot) => {
@@ -52,7 +55,7 @@ export default function AllQuestionsTutor() {
         snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }))
+        })),
       );
     });
 
@@ -61,7 +64,7 @@ export default function AllQuestionsTutor() {
         snapshot.docs.map((doc) => ({
           id: doc.id,
           ...doc.data(),
-        }))
+        })),
       );
     });
 
@@ -71,11 +74,66 @@ export default function AllQuestionsTutor() {
     };
   }, [user]);
 
+  useEffect(() => {
+    if (!user) return;
+
+    // 1. Open questions (Anyone can see these)
+    const openQuery = query(
+      collection(db, "questions"),
+      where("status", "==", "open"),
+    );
+
+    // 2. Accepted by THIS particular tutor
+    // NOTE: This requires a Composite Index in Firestore
+    const acceptedQuery = query(
+      collection(db, "questions"),
+      where("status", "==", "accepted"),
+      where("acceptedBy", "==", user.uid),
+      orderBy("createdAt", "desc"),
+    );
+
+    const unsubOpen = onSnapshot(openQuery, (snapshot) => {
+      setOpen(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+    });
+
+    const unsubAccepted = onSnapshot(
+      acceptedQuery,
+      (snapshot) => {
+        setAccepted(
+          snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })),
+        );
+      },
+      (error) => {
+        console.error("Accepted Query Error:", error);
+        // If you see an error here about indexes, click the link in the console.
+      },
+    );
+
+    return () => {
+      unsubOpen();
+      unsubAccepted();
+    };
+  }, [user]);
+
+  const handleCompleted = async (questionId) => {
+    try {
+      const questionRef = doc(db, "questions", questionId);
+
+      await updateDoc(questionRef, {
+        status: "completed",
+        completedAt: serverTimestamp(),
+      });
+
+      console.log("Question marked as completed!");
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Failed to mark as completed. Please try again.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-black px-6 py-20">
-      <h1 className="text-4xl font-bold text-white mb-16">
-        Tutor Dashboard
-      </h1>
+      <h1 className="text-4xl font-bold text-white mb-16">Tutor Dashboard</h1>
 
       {/* OPEN QUESTIONS */}
       <section className="mb-20">
@@ -96,13 +154,15 @@ export default function AllQuestionsTutor() {
             >
               {/* TIME BADGE */}
               <div className="absolute top-5 right-5">
-                <div className="
+                <div
+                  className="
                   flex items-center gap-1.5
                   px-3 py-1 rounded-full
                   bg-indigo-500/10 text-indigo-400
                   text-[11px] font-medium
                   border border-indigo-500/20
-                ">
+                "
+                >
                   <Clock size={12} />
                   {timeAgo(q.createdAt)}
                 </div>
@@ -128,9 +188,7 @@ export default function AllQuestionsTutor() {
           ))}
 
           {open.length === 0 && (
-            <p className="text-zinc-500 w-full">
-              No open questions right now.
-            </p>
+            <p className="text-zinc-500 w-full">No open questions right now.</p>
           )}
         </div>
       </section>
@@ -138,6 +196,14 @@ export default function AllQuestionsTutor() {
       {/* ACCEPTED QUESTIONS */}
       <section>
         <h2 className="text-2xl text-white mb-6">Accepted Questions</h2>
+        <div className="flex items-center justify-between mb-8">
+          <h2 className="text-2xl font-['Space_Grotesk'] text-white">
+            Your Active Sessions
+          </h2>
+          <span className="bg-emerald-500/10 text-emerald-400 text-xs font-bold px-3 py-1 rounded-full border border-emerald-500/20 uppercase tracking-widest">
+            {accepted.length} Active
+          </span>
+        </div>
 
         {accepted.length === 0 ? (
           <div className="rounded-3xl border border-dashed border-white/10 bg-zinc-900/40 p-10 text-center text-zinc-500">
@@ -157,14 +223,35 @@ export default function AllQuestionsTutor() {
                 "
               >
                 <div className="absolute top-5 right-5">
-                  <div className="
-                    flex items-center gap-1.5
+                  <div
+                    className="
+                    flex justify-center items-center gap-1.5
                     px-3 py-1 rounded-full
                     bg-emerald-500/10 text-emerald-400
                     text-[11px] font-medium
                     border border-emerald-500/20
-                  ">
+                    
+                  "
+                  >
                     Accepted
+                  </div>
+                  <div className="mt-7">
+                    <button
+                      className="
+  text-sm font-semibold
+  text-white
+  px-4 py-2
+  rounded-full
+  bg-gradient-to-r from-emerald-500 to-green-600
+  shadow-md
+  hover:from-emerald-600 hover:to-green-700
+  hover:shadow-lg
+  transition-all duration-200
+"
+                      onClick={() => handleCompleted(q.id)}
+                    >
+                      ✓ Completed
+                    </button>
                   </div>
                 </div>
 
@@ -172,9 +259,7 @@ export default function AllQuestionsTutor() {
                   {q.title}
                 </h2>
 
-                <p className="mt-4 text-sm text-zinc-300">
-                  {q.description}
-                </p>
+                <p className="mt-4 text-sm text-zinc-300">{q.description}</p>
               </motion.div>
             ))}
           </div>

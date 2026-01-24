@@ -416,7 +416,7 @@ export default function VideoSession({
 
           <button
             onClick={leaveSession}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg transition-colors"
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-bold shadow-lg transition-colors cursor-pointer "
           >
             End Session
           </button>
@@ -487,8 +487,8 @@ export default function VideoSession({
                   !mediaReady
                     ? "bg-gray-500 cursor-not-allowed"
                     : micOn
-                      ? "bg-gray-700/80 hover:bg-gray-600"
-                      : "bg-red-600 hover:bg-red-500"
+                      ? "bg-gray-700/80 hover:bg-gray-600 cursor-pointer"
+                      : "bg-red-600 hover:bg-red-500 cursor-pointer"
                 } text-white`}
               >
                 {micOn ? "🎤" : "❌"}
@@ -500,8 +500,8 @@ export default function VideoSession({
                   !mediaReady
                     ? "bg-gray-500 cursor-not-allowed"
                     : camOn
-                      ? "bg-gray-700/80 hover:bg-gray-600"
-                      : "bg-red-600 hover:bg-red-500"
+                      ? "bg-gray-700/80 hover:bg-gray-600 cursor-pointer"
+                      : "bg-red-600 hover:bg-red-500 cursor-pointer"
                 } text-white`}
               >
                 {camOn ? "📷" : "❌"}
@@ -558,7 +558,7 @@ export default function VideoSession({
           />
           <button
             onClick={sendMessage}
-            className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors"
+            className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-xl hover:bg-indigo-500 transition-colors cursor-pointer"
           >
             Send
           </button>
