@@ -74,7 +74,7 @@ export default function TutorQuestionDetail() {
       });
 
       // 3️⃣ Navigate to video session
-      navigate(`/session/${callDocRef.id}`);
+      navigate(`/tutor/session/${callDocRef.id}`);
     } catch (err) {
       console.error("Error starting session:", err);
     } finally {
