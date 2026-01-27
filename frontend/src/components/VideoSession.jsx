@@ -322,7 +322,6 @@ export default function VideoSession({
   const toogleScreenShare = async () => {
     if (!isSharingScreen) {
       try {
-        //1.getting the screen sharing stream
         const screenStream = await navigator.mediaDevices.getDisplayMedia({
           video: true,
           audio: true,
@@ -331,28 +330,32 @@ export default function VideoSession({
 
         const screenTrack = screenStream.getVideoTracks()[0];
 
-        //2. replace the track in peerconnection
+        // 1. Replace the track in PeerConnection
         if (pc.current) {
           const senders = pc.current.getSenders();
-          const videoSender = senders.find((s) => s.track.kind === "video");
+          const videoSender = senders.find(
+            (s) => s.track && s.track.kind === "video",
+          );
+
           if (videoSender) {
-            videoSender.replace(screenTrack);
+            // Note: replaceTrack is the correct method name
+            await videoSender.replaceTrack(screenTrack);
           }
         }
 
-        //3.update local ui stream
+        // 2. Update local UI to show what you're sharing
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = screenStream;
         }
 
-        //4 handle user clicking stop sharing
+        // 3. Handle user clicking "Stop Sharing" in the browser's native bar
         screenTrack.onended = () => {
           stopScreenShare();
         };
 
         setIsSharingScreen(true);
       } catch (error) {
-        console.error("screen sharing error: ", error);
+        console.error("Screen sharing error: ", error);
       }
     } else {
       stopScreenShare();

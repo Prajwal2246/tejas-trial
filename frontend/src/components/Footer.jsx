@@ -62,18 +62,18 @@ const Footer = () => {
 					{/* LINKS */}
 					<div className="lg:col-span-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-8">
 						<FooterColumn title="Explore">
-							<FooterLink to="/student-home">About Us</FooterLink>
-							<FooterLink to="/tutor-home">Blog</FooterLink>
-							<FooterLink to="/ask">Campus Program</FooterLink>
-							<FooterLink to="/pricing">Become a Mentor</FooterLink>
-							<FooterLink to="/pricing">Contact Us</FooterLink>
-							<FooterLink to="/pricing">Hire From Us</FooterLink>
+							<FooterLink to="/about-us">About Us</FooterLink>
+							<FooterLink to="/blog">Blog</FooterLink>
+							<FooterLink to="/campus-program">Campus Program</FooterLink>
+							<FooterLink to="/become-mentor">Become a Mentor</FooterLink>
+							<FooterLink to="/contact-us">Contact Us</FooterLink>
+							<FooterLink to="/hire-from-us">Hire From Us</FooterLink>
 						</FooterColumn>
 
 						<FooterColumn title="Useful Links">
-							<FooterLink to="/about">Privacy Policy</FooterLink>
-							<FooterLink to="/blog">Terms of Use</FooterLink>
-							<FooterLink to="/careers">Refund Policy</FooterLink>
+							<FooterLink to="/privacy">Privacy Policy</FooterLink>
+							<FooterLink to="/terms">Terms of Use</FooterLink>
+							<FooterLink to="/refund-policy">Refund Policy</FooterLink>
 						</FooterColumn>
 
 						<div>
