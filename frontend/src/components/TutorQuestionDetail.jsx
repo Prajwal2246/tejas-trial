@@ -150,7 +150,7 @@ export default function TutorQuestionDetail() {
                 shadow-lg
                 hover:bg-green-600 hover:scale-105
                 transition-transform active:scale-95
-                overflow-hidden group
+                overflow-hidden group cursor-pointer
               "
             >
               {accepting ? "Starting..." : "Accept & Start Session"}

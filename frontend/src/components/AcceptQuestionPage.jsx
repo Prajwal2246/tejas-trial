@@ -37,7 +37,7 @@ function AcceptQuestionPage() {
       <main className="max-w-4xl mx-auto px-6 py-12">
         <button
           onClick={() => navigate(-1)}
-          className="text-sm text-gray-300 hover:text-black mb-6"
+          className="text-sm text-gray-300 hover:text-black mb-6 cursor-pointer"
         >
           ← Back to Question
         </button>
@@ -51,7 +51,7 @@ function AcceptQuestionPage() {
           <div className="flex gap-4">
             <button
               onClick={startSession}
-              className="bg-black text-white px-6 py-2.5 cursor-pointer rounded-lg hover:bg-slate-600 transition"
+              className="bg-black text-white px-6 py-2.5 cursor-pointer rounded-lg hover:bg-slate-600 transition cursor-pointer"
             >
               Start Session
             </button>

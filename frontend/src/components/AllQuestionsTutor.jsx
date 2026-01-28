@@ -179,7 +179,7 @@ export default function AllQuestionsTutor() {
               <div className="mt-6 flex justify-end">
                 <button
                   onClick={() => navigate(`/tutor/question/${q.id}`)}
-                  className="text-sm text-indigo-400 hover:text-indigo-300"
+                  className="text-sm text-indigo-400 hover:text-indigo-300 cursor-pointer"
                 >
                   View →
                 </button>

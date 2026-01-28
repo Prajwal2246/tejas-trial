@@ -113,7 +113,7 @@ export default function AllQuestionsStudent() {
               <div className="mt-6 flex justify-end">
                 {/* 3. BUTTON NOW WORKS CORRECTLY */}
                 <button 
-                  className="text-sm text-slate-300 hover:text-indigo-300 transition-colors"
+                  className="text-sm text-slate-300 hover:text-indigo-300 transition-colors cursor-pointer"
                   onClick={() => navigate(`/student/question/${q.id}`)}
                 >
                   View Question →

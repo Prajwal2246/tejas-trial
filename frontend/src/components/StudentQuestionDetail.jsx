@@ -96,7 +96,7 @@ export default function StudentQuestionDetail() {
               font-semibold rounded-xl
               shadow-lg
               hover:bg-green-600 hover:scale-105
-              transition-transform active:scale-95
+              transition-transform active:scale-95 cursor-pointer
             "
           >
             <Video size={18} />
