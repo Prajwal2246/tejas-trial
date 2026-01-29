@@ -1,10 +1,10 @@
 import React, { lazy, Suspense, useEffect, useState } from "react";
-import { createBrowserRouter, RouterProvider, useNavigate } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, useNavigate, Outlet } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
 
-// ===== EAGER (critical) =====
+// ===== EAGER IMPORTS (Critical) =====
 import Layout from "./components/Layout";
 import Login from "./components/Login and SignUp/Login";
 import Signup from "./components/Login and SignUp/Signup";
@@ -12,7 +12,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 
 import "./App.css";
 
-// ===== LAZY LOADED =====
+// ===== LAZY LOADED IMPORTS =====
 
 // Home
 const StudentHomePage = lazy(() => import("./components/StudentHomePage"));
@@ -36,7 +36,7 @@ const AcceptQuestionPage = lazy(() => import("./components/AcceptQuestionPage"))
 // Video
 const VideoSession = lazy(() => import("./components/VideoSession"));
 
-// Footer
+// Footer Pages
 const PrivacyPolicy = lazy(() => import("./components/FooterComponents/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./components/FooterComponents/RefundPolicy"));
 const AboutUs = lazy(() => import("./components/FooterComponents/AboutUs"));
@@ -49,265 +49,244 @@ const HireFromUs = lazy(() => import("./components/FooterComponents/HireFromUs")
 
 // ===== FALLBACK LOADER =====
 const PageLoader = () => (
-	<div className="min-h-screen flex items-center justify-center bg-black text-white">
-		Loading...
-	</div>
+    <div className="min-h-screen flex items-center justify-center bg-black text-white">
+        {/* You can replace this text with a spinner or skeleton later */}
+        <p className="animate-pulse">Loading QuizMeBro...</p>
+    </div>
 );
 
 // ===== ROOT AUTH HANDLER =====
+// This component only exists to check auth and redirect. It renders nothing visible.
 function RootAuthHandler() {
-	const navigate = useNavigate();
-	const [loading, setLoading] = useState(true);
+    const navigate = useNavigate();
 
-	useEffect(() => {
-		const unsubscribe = onAuthStateChanged(auth, async (user) => {
-			if (user) {
-				try {
-					const userDocRef = doc(db, "users", user.uid);
-					const userDoc = await getDoc(userDocRef);
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                try {
+                    const userDocRef = doc(db, "users", user.uid);
+                    const userDoc = await getDoc(userDocRef);
 
-					if (userDoc.exists()) {
-						const userData = userDoc.data();
+                    if (userDoc.exists()) {
+                        const userData = userDoc.data();
 
-						if (userData.role === "Tutor") {
-							if (userData.isApproved === false) {
-								await signOut(auth);
-								setLoading(false);
-							} else {
-								navigate("/tutor-home");
-							}
-						} else {
-							navigate("/student-home");
-						}
-					} else {
-						setLoading(false);
-					}
-				} catch (err) {
-					console.error(err);
-					setLoading(false);
-				}
-			} else {
-				setLoading(false);
-			}
-		});
+                        // Route based on Role
+                        if (userData.role === "Tutor") {
+                            if (userData.isApproved === false) {
+                                await signOut(auth);
+                                navigate("/login");
+                            } else {
+                                navigate("/tutor-home");
+                            }
+                        } else {
+                            navigate("/student-home");
+                        }
+                    } else {
+                        // User exists in Auth but not Firestore
+                        navigate("/login");
+                    }
+                } catch (err) {
+                    console.error("Auth Error:", err);
+                    navigate("/login");
+                }
+            } else {
+                // No user found, send to login page
+                navigate("/login");
+            }
+        });
 
-		return () => unsubscribe();
-	}, [navigate]);
+        return () => unsubscribe();
+    }, [navigate]);
 
-	if (loading) return <PageLoader />;
-
-	return <Login />;
+    return <PageLoader />;
 }
 
 // ===== APP =====
 function App() {
-	const router = createBrowserRouter([
-		{
-			path: "/",
-			element: <Layout />,
-			children: [
-				{ path: "/", element: <RootAuthHandler /> },
-				{ path: "/login", element: <Login /> },
-				{ path: "/signup", element: <Signup /> },
+    const router = createBrowserRouter([
+        // 1. The Root Redirector (Runs first at "quizmebro.tech/")
+        {
+            path: "/",
+            element: <RootAuthHandler />,
+        },
 
-				// ---------- HOME ----------
-				{
-					path: "/student-home",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<StudentHomePage />
-						</Suspense>
-					),
-				},
-				{
-					path: "/tutor-home",
-					element: (
-						<ProtectedRoute>
-							<Suspense fallback={<PageLoader />}>
-								<TutorHomePage />
-							</Suspense>
-						</ProtectedRoute>
-					),
-				},
+        // 2. Public Routes (NO Sidebar/Layout)
+        {
+            path: "/login",
+            element: <Login />,
+        },
+        {
+            path: "/signup",
+            element: <Signup />,
+        },
 
-				// ---------- SESSIONS ----------
-				{
-					path: "/tutor/session-history",
-					element: (
-						<ProtectedRoute>
-							<Suspense fallback={<PageLoader />}>
-								<TutorSessionHistory />
-							</Suspense>
-						</ProtectedRoute>
-					),
-				},
-				{
-					path: "/student-session-history",
-					element: (
-						<ProtectedRoute>
-							<Suspense fallback={<PageLoader />}>
-								<StudentSessionHistory />
-							</Suspense>
-						</ProtectedRoute>
-					),
-				},
+        // 3. Protected Routes (Wrapped in Layout with Sidebar)
+        {
+            element: <Layout />, // This Layout now only wraps the internal app
+            children: [
+                // ---------- HOME ----------
+                {
+                    path: "/student-home",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <StudentHomePage />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/tutor-home",
+                    element: (
+                        <ProtectedRoute>
+                            <Suspense fallback={<PageLoader />}>
+                                <TutorHomePage />
+                            </Suspense>
+                        </ProtectedRoute>
+                    ),
+                },
 
-				// ---------- FEATURES ----------
-				{
-					path: "/ask",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<AskQuestion />
-						</Suspense>
-					),
-				},
-				{
-					path: "/admin",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<AdminDashboard />
-						</Suspense>
-					),
-				},
+                // ---------- SESSIONS ----------
+                {
+                    path: "/tutor/session-history",
+                    element: (
+                        <ProtectedRoute>
+                            <Suspense fallback={<PageLoader />}>
+                                <TutorSessionHistory />
+                            </Suspense>
+                        </ProtectedRoute>
+                    ),
+                },
+                {
+                    path: "/student-session-history",
+                    element: (
+                        <ProtectedRoute>
+                            <Suspense fallback={<PageLoader />}>
+                                <StudentSessionHistory />
+                            </Suspense>
+                        </ProtectedRoute>
+                    ),
+                },
 
-				// ---------- QUESTIONS ----------
-				{
-					path: "/all-question-student",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<AllQuestionsStudent />
-						</Suspense>
-					),
-				},
-				{
-					path: "/all-question-tutor",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<AllQuestionsTutor />
-						</Suspense>
-					),
-				},
-				{
-					path: "/student/question/:id",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<StudentQuestionDetail />
-						</Suspense>
-					),
-				},
-				{
-					path: "/tutor/question/:id",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<TutorQuestionDetail />
-						</Suspense>
-					),
-				},
-				{
-					path: "/tutor/question/:id/accept",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<AcceptQuestionPage />
-						</Suspense>
-					),
-				},
+                // ---------- FEATURES ----------
+                {
+                    path: "/ask",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <AskQuestion />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/admin",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <AdminDashboard />
+                        </Suspense>
+                    ),
+                },
 
-				// ---------- VIDEO ----------
-				{
-					path: "/session/:roomId",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<VideoSession isTutor={false} />
-						</Suspense>
-					),
-				},
-				{
-					path: "/tutor/session/:roomId",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<VideoSession isTutor={true} />
-						</Suspense>
-					),
-				},
+                // ---------- QUESTIONS ----------
+                {
+                    path: "/all-question-student",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <AllQuestionsStudent />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/all-question-tutor",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <AllQuestionsTutor />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/student/question/:id",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <StudentQuestionDetail />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/tutor/question/:id",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <TutorQuestionDetail />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/tutor/question/:id/accept",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <AcceptQuestionPage />
+                        </Suspense>
+                    ),
+                },
 
-				// ---------- FOOTER ----------
-				{
-					path: "/blog",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<Blog />
-						</Suspense>
-					),
-				},
-				{
-					path: "/contact-us",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<ContactUs />
-						</Suspense>
-					),
-				},
-				{
-					path: "/refund-policy",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<RefundPolicy />
-						</Suspense>
-					),
-				},
-				{
-					path: "/become-mentor",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<BecomeMentor />
-						</Suspense>
-					),
-				},
-				{
-					path: "/privacy",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<PrivacyPolicy />
-						</Suspense>
-					),
-				},
-				{
-					path: "/terms",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<TermsOfUse />
-						</Suspense>
-					),
-				},
-				{
-					path: "/about-us",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<AboutUs />
-						</Suspense>
-					),
-				},
-				{
-					path: "/campus-program",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<CampusProgram />
-						</Suspense>
-					),
-				},
-				{
-					path: "/hire-from-us",
-					element: (
-						<Suspense fallback={<PageLoader />}>
-							<HireFromUs />
-						</Suspense>
-					),
-				},
-			],
-		},
-	]);
+                // ---------- VIDEO (Might want to remove Layout for full screen?) ----------
+                // If you want video to be full screen without sidebar, move these routes OUT of this Layout block
+                {
+                    path: "/session/:roomId",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <VideoSession isTutor={false} />
+                        </Suspense>
+                    ),
+                },
+                {
+                    path: "/tutor/session/:roomId",
+                    element: (
+                        <Suspense fallback={<PageLoader />}>
+                            <VideoSession isTutor={true} />
+                        </Suspense>
+                    ),
+                },
 
-	return <RouterProvider router={router} />;
+                // ---------- FOOTER PAGES ----------
+                {
+                    path: "/blog",
+                    element: <Suspense fallback={<PageLoader />}><Blog /></Suspense>,
+                },
+                {
+                    path: "/contact-us",
+                    element: <Suspense fallback={<PageLoader />}><ContactUs /></Suspense>,
+                },
+                {
+                    path: "/refund-policy",
+                    element: <Suspense fallback={<PageLoader />}><RefundPolicy /></Suspense>,
+                },
+                {
+                    path: "/become-mentor",
+                    element: <Suspense fallback={<PageLoader />}><BecomeMentor /></Suspense>,
+                },
+                {
+                    path: "/privacy",
+                    element: <Suspense fallback={<PageLoader />}><PrivacyPolicy /></Suspense>,
+                },
+                {
+                    path: "/terms",
+                    element: <Suspense fallback={<PageLoader />}><TermsOfUse /></Suspense>,
+                },
+                {
+                    path: "/about-us",
+                    element: <Suspense fallback={<PageLoader />}><AboutUs /></Suspense>,
+                },
+                {
+                    path: "/campus-program",
+                    element: <Suspense fallback={<PageLoader />}><CampusProgram /></Suspense>,
+                },
+                {
+                    path: "/hire-from-us",
+                    element: <Suspense fallback={<PageLoader />}><HireFromUs /></Suspense>,
+                },
+            ],
+        },
+    ]);
+
+    return <RouterProvider router={router} />;
 }
 
 export default App;
