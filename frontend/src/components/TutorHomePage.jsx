@@ -7,33 +7,47 @@ function TutorHomePage() {
   const navigate = useNavigate();
 
   const quickActions = [
-    { label: "View Open Questions", action: () => navigate("/all-question-tutor") },
-    { label: "My Sessions", action: () => navigate("/tutor/session-history") },
-    { label: "Payment History", action: () => {} },
-    { label: "Profile Settings", action: () => {} },
+    {
+      label: "View Open Questions",
+      action: () => navigate("/all-question-tutor"),
+    },
+    {
+      label: "My Sessions",
+      action: () => navigate("/tutor/session-history"),
+    },
+    {
+      label: "Payment History",
+      action: () => {},
+    },
+    {
+      label: "Profile Settings",
+      action: () => {},
+    },
   ];
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-8 pt-6 px-4">
+    <div className="w-full max-w-6xl mx-auto space-y-10 pt-6">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white">Tutor Dashboard</h1>
-          <p className="text-slate-400 text-sm mt-1">Manage your sessions and students</p>
+          <h1 className="text-3xl font-bold text-white">Tutor Dashboard</h1>
+          <p className="text-slate-400 mt-1">
+            Manage your sessions and students
+          </p>
         </div>
 
         <button
           onClick={() => navigate("/all-question-tutor")}
-          className="px-6 py-3 bg-blue-600 active:bg-blue-700 text-white rounded-xl
-                     font-medium shadow-md transition-transform active:scale-95"
+          className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-xl
+                     font-medium transition-all shadow-lg shadow-blue-500/25
+                     active:scale-95"
         >
           Find Questions
         </button>
       </div>
 
       {/* STATS */}
-      {/* OPTIMIZATION: Removed staggered animation for stats to load faster */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard
           label="Total Sessions"
           value="24"
@@ -55,68 +69,92 @@ function TutorHomePage() {
       </div>
 
       {/* CONTENT */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* QUICK ACTIONS */}
         <motion.div
-          initial={{ opacity: 0, x: -10 }}
+          initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-          className="p-5 rounded-xl bg-slate-900 border border-slate-800"
+          // GPU HACK applied here
+          className="p-6 rounded-2xl bg-slate-900/50 border border-white/10 transform-gpu"
         >
-          <h3 className="text-lg font-semibold text-white mb-4">Quick Actions</h3>
+          <h3 className="text-xl font-semibold text-white mb-6">
+            Quick Actions
+          </h3>
 
-          <div className="space-y-2">
+          <div className="space-y-3">
             {quickActions.map((item, i) => (
-              <div
+              <motion.div
                 key={i}
+                whileHover={{ x: 6 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={item.action}
-                className="flex items-center justify-between p-3 rounded-lg
-                           bg-slate-800 hover:bg-slate-700
-                           cursor-pointer transition-colors"
+                className="flex items-center justify-between p-4 rounded-xl
+                           bg-slate-800/30 hover:bg-slate-800/50
+                           border border-white/5 cursor-pointer
+                           transition-colors group"
               >
-                <span className="text-slate-300 text-sm">{item.label}</span>
-                <ChevronRight className="w-4 h-4 text-slate-500" />
-              </div>
+                <span className="text-slate-300 group-hover:text-white">
+                  {item.label}
+                </span>
+                <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-white" />
+              </motion.div>
             ))}
           </div>
         </motion.div>
 
         {/* NEXT SESSION */}
         <motion.div
-          initial={{ opacity: 0, x: 10 }}
+          initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.3 }}
-          className="p-6 rounded-xl bg-slate-900 border border-slate-800
+          transition={{ delay: 0.1 }}
+          // GPU HACK applied here
+          className="p-6 rounded-2xl bg-gradient-to-br
+                     from-blue-900/20 to-purple-900/20
+                     border border-white/10
                      flex flex-col justify-center items-center
-                     text-center space-y-3"
+                     text-center space-y-4 transform-gpu"
         >
-          <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center">
-            <Users className="w-6 h-6 text-blue-400" />
+          <div className="w-16 h-16 rounded-full bg-blue-500/10 flex items-center justify-center">
+            <Users className="w-8 h-8 text-blue-400" />
           </div>
-          <h3 className="text-lg font-bold text-white">Next Session</h3>
-          <p className="text-slate-400 text-sm">No upcoming sessions today.</p>
-          <button className="text-blue-400 text-sm font-medium">View Calendar</button>
+          <h3 className="text-xl font-bold text-white">
+            Next Session
+          </h3>
+          <p className="text-slate-400">
+            You have no upcoming sessions scheduled for today.
+          </p>
+          <button className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+            View Calendar
+          </button>
         </motion.div>
       </div>
     </div>
   );
 }
 
-/* STAT CARD - OPTIMIZED */
+/* STAT CARD */
 function StatCard({ label, value, icon, color }) {
   return (
-    <div className="p-5 rounded-xl bg-slate-900 border border-slate-800">
-      {/* Removed motion.div wrapper and backdrop-blur to save GPU */}
+    <motion.div
+      whileHover={{ y: -4 }}
+      // GPU HACK: Use transform-gpu + backdrop-blur fix
+      className="p-6 rounded-2xl bg-slate-900/80
+                 border border-white/10 backdrop-blur-sm transform-gpu will-change-transform"
+    >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">{label}</p>
-          <h4 className="text-2xl font-bold text-white mt-1">{value}</h4>
+          <p className="text-sm font-medium text-slate-400">
+            {label}
+          </p>
+          <h4 className="text-3xl font-bold text-white mt-2">
+            {value}
+          </h4>
         </div>
-        <div className={`p-2 rounded-lg bg-slate-800 ${color}`}>
+        <div className={`p-3 rounded-lg bg-white/5 ${color}`}>
           {icon}
         </div>
       </div>
-    </div>
+    </motion.div>
   );
 }
 
