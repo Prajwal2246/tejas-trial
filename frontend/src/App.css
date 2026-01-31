@@ -1,9 +1,52 @@
 @import "tailwindcss";
-/* App.css */
+
+/* ===== CORE SMOOTHING ===== */
+html {
+  /* This works for desktop and some mobile browsers */
+  scroll-behavior: smooth !important;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #020617; /* slate-950 */
+  color: white;
+  /* Prevent horizontal wobble on mobile */
+  overflow-x: hidden; 
+  /* Essential for iOS momentum scrolling */
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ===== REPLACING THE LAGGY '*' SELECTOR ===== */
+/* Only hardware accelerate things that actually move */
+.animate-entry, 
+.animate-fade-in,
+.gpu-layer {
+  transform: translateZ(0);
+  will-change: transform, opacity;
+}
+
+/* ===== MOBILE SCROLL FIXES ===== */
+@media (max-width: 768px) {
+  /* Disable heavy blurs that kill mobile FPS during scroll */
+  .backdrop-blur-xl, .backdrop-blur-3xl {
+    backdrop-filter: blur(8px) !important;
+    -webkit-backdrop-filter: blur(8px) !important;
+  }
+
+  /* Prevent 'sticky' hover states on mobile touch */
+  @media (hover: none) {
+    .hover\:scale-105:hover {
+      transform: none !important;
+    }
+  }
+}
+
+/* ===== ANIMATIONS ===== */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(20px);
+    transform: translateY(15px);
   }
   to {
     opacity: 1;
@@ -12,125 +55,22 @@
 }
 
 .animate-entry {
-  opacity: 0; /* Start hidden */
+  opacity: 0;
   animation: fadeInUp 0.5s ease-out forwards;
 }
 
-/* Stagger delays for items */
 .delay-1 { animation-delay: 0.1s; }
 .delay-2 { animation-delay: 0.2s; }
 .delay-3 { animation-delay: 0.3s; }
 
-/* ===== OPTIMIZED ANIMATIONS FOR MOBILE ===== */
-
-/* Lightweight fade-in animation */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+/* ===== MODERN SCROLLBAR ===== */
+::-webkit-scrollbar {
+  width: 6px;
 }
-
-.animate-fade-in {
-  animation: fadeIn 0.3s ease-out;
+::-webkit-scrollbar-track {
+  background: #0f172a;
 }
-
-/* Entry animations with delays - Much lighter than Framer Motion */
-.animate-entry {
-  animation: fadeIn 0.4s ease-out;
-  animation-fill-mode: both;
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 10px;
 }
-
-.delay-1 {
-  animation-delay: 0.1s;
-}
-
-.delay-2 {
-  animation-delay: 0.2s;
-}
-
-.delay-3 {
-  animation-delay: 0.3s;
-}
-
-/* Optimized shimmer - Only when needed */
-@keyframes shimmer {
-  0% {
-    background-position: -200% center;
-  }
-  100% {
-    background-position: 200% center;
-  }
-}
-
-.animate-shimmer {
-  animation: shimmer 3s linear infinite;
-}
-
-/* ===== MOBILE OPTIMIZATIONS ===== */
-
-/* Disable animations on low-end devices */
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-  }
-}
-
-/* Reduce blur effects on mobile for better performance */
-@media (max-width: 768px) {
-  .backdrop-blur-xl {
-    backdrop-filter: blur(8px); /* Reduced from default 24px */
-  }
-  
-  .backdrop-blur-3xl {
-    backdrop-filter: blur(12px); /* Reduced from default 64px */
-  }
-  
-  /* Disable expensive blur backgrounds on mobile */
-  .blur-\[120px\],
-  .blur-\[80px\] {
-    opacity: 0.3; /* Just fade instead of blur */
-    filter: none;
-  }
-}
-
-/* Force GPU acceleration for smooth interactions */
-.gpu-accelerate {
-  transform: translateZ(0);
-  will-change: transform;
-}
-
-/* Optimize touch interactions */
-button,
-.cursor-pointer {
-  -webkit-tap-highlight-color: transparent;
-  touch-action: manipulation;
-}
-
-/* Prevent layout shift */
-img,
-video {
-  max-width: 100%;
-  height: auto;
-}
-
-/* ===== PERFORMANCE HINTS ===== */
-
-/* Tell browser which elements will animate */
-.will-animate {
-  will-change: opacity, transform;
-}
-
-/* Remove will-change after animation */
-.animation-done {
-  will-change: auto;
-}
-

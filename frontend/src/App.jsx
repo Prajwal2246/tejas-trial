@@ -44,6 +44,16 @@ const PageLoader = () => (
     </div>
 );
 
+// 3. LAYOUT WRAPPER (To inject ScrollToTop)
+const AppLayout = () => (
+  <>
+    <ScrollToTop />
+    <Layout>
+      <Outlet />
+    </Layout>
+  </>
+);
+
 // ===== OPTIMIZED ROOT AUTH HANDLER =====
 function RootAuthHandler() {
     const navigate = useNavigate();
@@ -106,7 +116,7 @@ function App() {
 
         // Protected Routes
         {
-            element: <Layout />, 
+            element: <AppLayout />, 
             children: [
                 {
                     path: "/student-home",
