@@ -1,5 +1,5 @@
-import React, { lazy, Suspense, useEffect, useState } from "react";
-import { createBrowserRouter, RouterProvider, useNavigate, Outlet } from "react-router-dom";
+import React, { lazy, Suspense, useEffect } from "react";
+import { createBrowserRouter, RouterProvider, useNavigate } from "react-router-dom";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "./firebase";
@@ -50,45 +50,82 @@ const HireFromUs = lazy(() => import("./components/FooterComponents/HireFromUs")
 // ===== FALLBACK LOADER =====
 const PageLoader = () => (
     <div className="min-h-screen flex items-center justify-center bg-black text-white">
-        {/* You can replace this text with a spinner or skeleton later */}
         <p className="animate-pulse">Loading QuizMeBro...</p>
     </div>
 );
 
-// ===== ROOT AUTH HANDLER =====
-// This component only exists to check auth and redirect. It renders nothing visible.
-// Replace your existing RootAuthHandler with this version
+// ===== ROOT AUTH HANDLER (OPTIMIZED) =====
 function RootAuthHandler() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                try {
-                    const userDocRef = doc(db, "users", user.uid);
-                    const userDoc = await getDoc(userDocRef);
-                    if (userDoc.exists()) {
-                        const userData = userDoc.data();
-                        if (userData.role === "Tutor") {
-                            userData.isApproved ? navigate("/tutor-home") : navigate("/login");
-                        } else {
-                            navigate("/student-home");
-                        }
-                    } else {
-                        navigate("/login");
-                    }
-                } catch (err) {
+        // 1. FAST CHECK: Try to read from LocalStorage first
+        const checkCache = () => {
+            const cachedRole = localStorage.getItem("userRole");
+            const cachedApproved = localStorage.getItem("userApproved"); // Returns string "true" or "false"
+
+            if (cachedRole === "Student") {
+                navigate("/student-home");
+                return true; // Found in cache
+            } 
+            
+            if (cachedRole === "Tutor") {
+                if (cachedApproved === "true") {
+                    navigate("/tutor-home");
+                } else {
+                    // If stored as not approved, safer to send to login/check again
                     navigate("/login");
                 }
-            } else {
-                navigate("/login");
+                return true; // Found in cache
             }
-        });
-        return () => unsubscribe();
+            
+            return false; // Not found, proceed to Firebase
+        };
+
+        const isCached = checkCache();
+
+        // 2. SLOW CHECK: If not in cache, ask Firebase
+        if (!isCached) {
+            const unsubscribe = onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    try {
+                        const userDocRef = doc(db, "users", user.uid);
+                        const userDoc = await getDoc(userDocRef);
+
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data();
+                            
+                            // Refresh cache for next time
+                            localStorage.setItem("userRole", userData.role);
+                            localStorage.setItem("userApproved", String(userData.isApproved));
+
+                            if (userData.role === "Tutor") {
+                                if (userData.isApproved === false) {
+                                    await signOut(auth);
+                                    navigate("/login");
+                                } else {
+                                    navigate("/tutor-home");
+                                }
+                            } else {
+                                navigate("/student-home");
+                            }
+                        } else {
+                            navigate("/login");
+                        }
+                    } catch (err) {
+                        console.error(err);
+                        navigate("/login");
+                    }
+                } else {
+                    navigate("/login");
+                }
+            });
+
+            return () => unsubscribe();
+        }
     }, [navigate]);
 
-    // OPTIMIZED LOADING SCREEN (Skeleton UI)
-    // This renders INSTANTLY while Firebase connects
+    // RENDER SKELETON UI (Instant Visual Feedback)
     return (
         <div className="min-h-screen bg-slate-950 p-6 space-y-8 animate-pulse">
             {/* Fake Header */}
@@ -131,7 +168,7 @@ function App() {
 
         // 3. Protected Routes (Wrapped in Layout with Sidebar)
         {
-            element: <Layout />, // This Layout now only wraps the internal app
+            element: <Layout />, 
             children: [
                 // ---------- HOME ----------
                 {
@@ -235,8 +272,7 @@ function App() {
                     ),
                 },
 
-                // ---------- VIDEO (Might want to remove Layout for full screen?) ----------
-                // If you want video to be full screen without sidebar, move these routes OUT of this Layout block
+                // ---------- VIDEO ----------
                 {
                     path: "/session/:roomId",
                     element: (

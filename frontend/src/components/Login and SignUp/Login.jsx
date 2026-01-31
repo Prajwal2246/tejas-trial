@@ -3,12 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { Zap, ArrowRight, Lock, Mail } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-// REMOVED: doc, getDoc imports (We don't need to fetch data here anymore)
-import { auth } from "../../firebase";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "../../firebase";
 
 // === PRELOAD FUNCTION ===
+// Starts downloading the heavy dashboard files in the background
 const preloadDashboards = () => {
-  // Starts downloading the heavy dashboard files in the background
   import("../StudentHomePage"); 
   import("../TutorHomePage");
 };
@@ -52,17 +52,33 @@ function Login() {
     setLoading(true);
 
     try {
-      // 1. AUTHENTICATE ONLY (Fast)
-      await signInWithEmailAndPassword(auth, email, password);
+      // 1. Authenticate with Firebase Auth
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
       
-      // 2. NAVIGATE IMMEDIATELY to Root ("/")
-      // We do NOT fetch the database here. We let the RootAuthHandler
-      // (in App.js) show the Skeleton UI and handle the routing.
-      navigate("/"); 
+      // 2. FETCH & CACHE ROLE (The Speed Fix)
+      // We fetch the user data HERE while the spinner is showing.
+      const userDocRef = doc(db, "users", userCred.user.uid);
+      const userDoc = await getDoc(userDocRef);
       
+      if (userDoc.exists()) {
+         const userData = userDoc.data();
+         
+         // SAVE TO LOCAL STORAGE (Phone Memory)
+         // This allows the next page to load instantly without checking the DB again.
+         localStorage.setItem("userRole", userData.role); 
+         // Convert boolean to string for storage
+         localStorage.setItem("userApproved", String(userData.isApproved));
+         
+         // 3. Navigate to Root
+         navigate("/"); 
+      } else {
+         setError("User data not found.");
+         setLoading(false);
+      }
+
     } catch (err) {
       console.error(err);
-      setLoading(false); // Only stop loading on error
+      setLoading(false);
 
       if (err.code === "auth/invalid-email") {
         setError("Invalid email address");
