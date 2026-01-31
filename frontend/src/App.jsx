@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useEffect } from "react";
-import { createBrowserRouter, RouterProvider, useNavigate } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, useNavigate, useLocation, Outlet } from "react-router-dom";
 import { onAuthStateChanged } from "firebase/auth";
 import { auth } from "./firebase";
 
@@ -25,7 +25,7 @@ const StudentQuestionDetail = lazy(() => import("./components/StudentQuestionDet
 const AcceptQuestionPage = lazy(() => import("./components/AcceptQuestionPage"));
 const VideoSession = lazy(() => import("./components/VideoSession"));
 
-// Footer Pages (lowest priority - lazy load)
+// Footer Pages
 const PrivacyPolicy = lazy(() => import("./components/FooterComponents/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./components/FooterComponents/RefundPolicy"));
 const AboutUs = lazy(() => import("./components/FooterComponents/AboutUs"));
@@ -44,7 +44,27 @@ const PageLoader = () => (
     </div>
 );
 
-// 3. LAYOUT WRAPPER (To inject ScrollToTop)
+// ===== MOBILE SMOOTH SCROLL COMPONENT =====
+const ScrollToTop = () => {
+    const { pathname } = useLocation();
+
+    useEffect(() => {
+        try {
+            window.scrollTo({
+                top: 0,
+                left: 0,
+                behavior: "smooth",
+            });
+        } catch (error) {
+            // Fallback for older browsers
+            window.scrollTo(0, 0);
+        }
+    }, [pathname]);
+
+    return null;
+};
+
+// ===== LAYOUT WRAPPER =====
 const AppLayout = () => (
   <>
     <ScrollToTop />
@@ -59,11 +79,9 @@ function RootAuthHandler() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        // 🚀 INSTANT CHECK: Read from localStorage (cached data)
         const cachedRole = localStorage.getItem("userRole");
         const cachedApproved = localStorage.getItem("userApproved");
 
-        // If we have cached data, navigate immediately
         if (cachedRole) {
             if (cachedRole === "Student") {
                 navigate("/student-home", { replace: true });
@@ -74,12 +92,10 @@ function RootAuthHandler() {
             }
         }
 
-        // 🔍 FALLBACK: Check Firebase auth state (only if no cache)
         const unsubscribe = onAuthStateChanged(auth, (user) => {
             if (!user) {
                 navigate("/login", { replace: true });
             } else {
-                // User is logged in but no cache - redirect to login to refresh cache
                 navigate("/login", { replace: true });
             }
         });
@@ -87,7 +103,6 @@ function RootAuthHandler() {
         return () => unsubscribe();
     }, [navigate]);
 
-    // MINIMAL skeleton UI
     return (
         <div className="min-h-screen bg-slate-950 flex items-center justify-center">
             <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent 
@@ -103,8 +118,6 @@ function App() {
             path: "/",
             element: <RootAuthHandler />,
         },
-
-        // Public Routes
         {
             path: "/login",
             element: <Login />,
@@ -113,8 +126,6 @@ function App() {
             path: "/signup",
             element: <Signup />,
         },
-
-        // Protected Routes
         {
             element: <AppLayout />, 
             children: [
