@@ -57,6 +57,7 @@ const PageLoader = () => (
 
 // ===== ROOT AUTH HANDLER =====
 // This component only exists to check auth and redirect. It renders nothing visible.
+// Replace your existing RootAuthHandler with this version
 function RootAuthHandler() {
     const navigate = useNavigate();
 
@@ -66,39 +67,47 @@ function RootAuthHandler() {
                 try {
                     const userDocRef = doc(db, "users", user.uid);
                     const userDoc = await getDoc(userDocRef);
-
                     if (userDoc.exists()) {
                         const userData = userDoc.data();
-
-                        // Route based on Role
                         if (userData.role === "Tutor") {
-                            if (userData.isApproved === false) {
-                                await signOut(auth);
-                                navigate("/login");
-                            } else {
-                                navigate("/tutor-home");
-                            }
+                            userData.isApproved ? navigate("/tutor-home") : navigate("/login");
                         } else {
                             navigate("/student-home");
                         }
                     } else {
-                        // User exists in Auth but not Firestore
                         navigate("/login");
                     }
                 } catch (err) {
-                    console.error("Auth Error:", err);
                     navigate("/login");
                 }
             } else {
-                // No user found, send to login page
                 navigate("/login");
             }
         });
-
         return () => unsubscribe();
     }, [navigate]);
 
-    return <PageLoader />;
+    // OPTIMIZED LOADING SCREEN (Skeleton UI)
+    // This renders INSTANTLY while Firebase connects
+    return (
+        <div className="min-h-screen bg-slate-950 p-6 space-y-8 animate-pulse">
+            {/* Fake Header */}
+            <div className="h-8 w-48 bg-slate-800 rounded"></div>
+            
+            {/* Fake Hero Text */}
+            <div className="space-y-3">
+                <div className="h-12 w-3/4 bg-slate-800 rounded"></div>
+                <div className="h-4 w-1/2 bg-slate-800 rounded"></div>
+            </div>
+
+            {/* Fake Grid Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="h-40 bg-slate-900 border border-slate-800 rounded-xl"></div>
+                <div className="h-40 bg-slate-900 border border-slate-800 rounded-xl"></div>
+                <div className="h-40 bg-slate-900 border border-slate-800 rounded-xl"></div>
+            </div>
+        </div>
+    );
 }
 
 // ===== APP =====

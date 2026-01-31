@@ -1,10 +1,21 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { Zap, ArrowRight, Lock, Mail } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
+
+// === SOLUTION 1: PRELOAD FUNCTION ===
+// This starts downloading the dashboard code in the background
+// so it is ready BEFORE the user clicks login.
+const preloadDashboards = () => {
+  // These paths must match where your HomePage files are located
+  // Assuming Login.js is in "components/Login and SignUp/" 
+  // and StudentHomePage is in "components/"
+  import("../StudentHomePage"); 
+  import("../TutorHomePage");
+};
 
 function Login() {
   const navigate = useNavigate();
@@ -13,6 +24,11 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // === SOLUTION 1: TRIGGER PRELOAD ===
+  useEffect(() => {
+    preloadDashboards();
+  }, []);
 
   /* ---------------- MOUSE / 3D LOGIC ---------------- */
   const x = useMotionValue(0);
@@ -28,6 +44,10 @@ function Login() {
   const backgroundY = useTransform(mouseY, [0, window.innerHeight], [20, -20]);
 
   const handleMouseMove = (e) => {
+    // OPTIMIZATION: Stop calculating 3D physics if we are currently logging in.
+    // This frees up the CPU to load the next page faster.
+    if (loading) return; 
+    
     x.set(e.clientX);
     y.set(e.clientY);
   };
@@ -42,7 +62,6 @@ function Login() {
 
       // 🔐 Firebase Auth
       const userCred = await signInWithEmailAndPassword(auth, email, password);
-
       const user = userCred.user;
 
       // 📦 Firestore profile check
@@ -84,7 +103,8 @@ function Login() {
       } else {
         setError(`${err.code}`);
       }
-    } finally {
+      // Only set loading false if there was an error. 
+      // If success, keep it true so the 3D animation stays frozen during redirect.
       setLoading(false);
     }
   };
