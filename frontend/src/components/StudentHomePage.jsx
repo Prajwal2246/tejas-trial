@@ -1,9 +1,8 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import { BookOpen, MessageCircle, Clock, ArrowRight } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
-import "../App.css"; // Ensure you imported the CSS above
+import "../App.css";
 
 function StudentHomePage() {
   const navigate = useNavigate();
@@ -11,7 +10,7 @@ function StudentHomePage() {
 
   return (
     <div className="w-full max-w-5xl mx-auto space-y-8 pt-6 px-4">
-      {/* Hero Section - CSS Animation */}
+      {/* Hero Section - Pure CSS Animation */}
       <div className="text-center space-y-3 animate-entry">
         <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-white">
           Hello, <span className="text-blue-500">{user?.name || "Student"}</span>
@@ -21,9 +20,8 @@ function StudentHomePage() {
         </p>
       </div>
 
-      {/* Action Grid - CSS Animation for Layout, Framer for Buttons */}
+      {/* Action Grid - NO Framer Motion */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Card 1 */}
         <div className="animate-entry delay-1">
           <ActionCard
             icon={<MessageCircle className="w-6 h-6 text-blue-400" />}
@@ -34,7 +32,6 @@ function StudentHomePage() {
           />
         </div>
 
-        {/* Card 2 */}
         <div className="animate-entry delay-2">
           <ActionCard
             icon={<BookOpen className="w-6 h-6 text-purple-400" />}
@@ -45,7 +42,6 @@ function StudentHomePage() {
           />
         </div>
 
-        {/* Card 3 */}
         <div className="animate-entry delay-3">
           <ActionCard
             icon={<Clock className="w-6 h-6 text-emerald-400" />}
@@ -60,17 +56,18 @@ function StudentHomePage() {
   );
 }
 
-// Only use Framer Motion for the INTERACTION (Hover/Tap), not the entry.
+// ⚡ PURE CSS - No Framer Motion (saves ~60KB)
 const ActionCard = ({ icon, title, desc, onClick, label }) => {
   return (
-    <motion.div
-      whileTap={{ scale: 0.98 }}
+    <div
       onClick={onClick}
       className="group relative p-5 rounded-xl bg-slate-900 border border-slate-800 
-                 active:border-blue-500/50 cursor-pointer transition-colors"
+                 hover:border-blue-500/50 active:scale-[0.98] 
+                 cursor-pointer transition-all duration-200 ease-out"
     >
       <div className="relative z-10 flex flex-col items-start h-full">
-        <div className="p-3 rounded-lg bg-slate-800 mb-3">
+        <div className="p-3 rounded-lg bg-slate-800 mb-3 
+                        group-hover:bg-slate-700 transition-colors">
           {icon}
         </div>
         <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
@@ -79,7 +76,7 @@ const ActionCard = ({ icon, title, desc, onClick, label }) => {
           {label} <ArrowRight className="w-4 h-4 ml-1" />
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 };
 

@@ -1,13 +1,11 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { Zap, ArrowRight, Lock, Mail } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../../firebase";
 
 // === PRELOAD FUNCTION ===
-// Starts downloading the heavy dashboard files in the background
 const preloadDashboards = () => {
   import("../StudentHomePage"); 
   import("../TutorHomePage");
@@ -26,25 +24,6 @@ function Login() {
     preloadDashboards();
   }, []);
 
-  /* ---------------- MOUSE / 3D LOGIC ---------------- */
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-
-  const mouseX = useSpring(x, { stiffness: 50, damping: 10 });
-  const mouseY = useSpring(y, { stiffness: 50, damping: 10 });
-
-  const rotateX = useTransform(mouseY, [0, window.innerHeight], [10, -10]);
-  const rotateY = useTransform(mouseX, [0, window.innerWidth], [-10, 10]);
-
-  const backgroundX = useTransform(mouseX, [0, window.innerWidth], [20, -20]);
-  const backgroundY = useTransform(mouseY, [0, window.innerHeight], [20, -20]);
-
-  const handleMouseMove = (e) => {
-    if (loading) return; 
-    x.set(e.clientX);
-    y.set(e.clientY);
-  };
-
   /* ---------------- LOGIN ---------------- */
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -56,21 +35,31 @@ function Login() {
       const userCred = await signInWithEmailAndPassword(auth, email, password);
       
       // 2. FETCH & CACHE ROLE (The Speed Fix)
-      // We fetch the user data HERE while the spinner is showing.
       const userDocRef = doc(db, "users", userCred.user.uid);
       const userDoc = await getDoc(userDocRef);
       
       if (userDoc.exists()) {
          const userData = userDoc.data();
          
-         // SAVE TO LOCAL STORAGE (Phone Memory)
-         // This allows the next page to load instantly without checking the DB again.
+         // SAVE TO LOCAL STORAGE
          localStorage.setItem("userRole", userData.role); 
-         // Convert boolean to string for storage
          localStorage.setItem("userApproved", String(userData.isApproved));
+         localStorage.setItem("userName", userData.name || ""); // Add user name for faster display
+         localStorage.setItem("userEmail", userData.email || "");
          
-         // 3. Navigate to Root
-         navigate("/"); 
+         // 3. Navigate directly to the correct page (SKIP the root handler)
+         if (userData.role === "Tutor") {
+           if (userData.isApproved === false) {
+             await auth.signOut();
+             setError("Your tutor account is pending approval.");
+             setLoading(false);
+             return;
+           } else {
+             navigate("/tutor-home", { replace: true });
+           }
+         } else {
+           navigate("/student-home", { replace: true });
+         }
       } else {
          setError("User data not found.");
          setLoading(false);
@@ -96,42 +85,33 @@ function Login() {
   };
 
   return (
-    <div
-      onMouseMove={handleMouseMove}
-      className="min-h-screen bg-[#050505] flex items-center justify-center relative overflow-hidden perspective-1000"
-    >
-      {/* BACKGROUND */}
-      <motion.div
-        style={{ x: backgroundX, y: backgroundY }}
-        className="absolute inset-0 z-0 pointer-events-none"
-      >
-        <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-cyan-600/20 rounded-full blur-[120px] mix-blend-screen animate-pulse" />
-        <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-purple-600/20 rounded-full blur-[120px] mix-blend-screen animate-pulse delay-700" />
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-overlay" />
-      </motion.div>
+    <div className="min-h-screen bg-[#050505] flex items-center justify-center relative overflow-hidden">
+      {/* SIMPLIFIED BACKGROUND - Much lighter on mobile */}
+      <div className="absolute inset-0 z-0 pointer-events-none">
+        <div className="absolute top-[-10%] left-[-5%] w-[400px] h-[400px] 
+                        bg-cyan-600/10 rounded-full blur-[80px]" />
+        <div className="absolute bottom-[-10%] right-[-5%] w-[300px] h-[300px] 
+                        bg-purple-600/10 rounded-full blur-[80px]" />
+      </div>
 
-      {/* CARD */}
-      <motion.div
-        style={{ rotateX, rotateY, transformStyle: "preserve-3d" }}
-        initial={{ opacity: 0, scale: 0.5, rotateX: 45 }}
-        animate={{ opacity: 1, scale: 1, rotateX: 0 }}
-        transition={{ type: "spring", stiffness: 200, damping: 20 }}
-        className="relative z-10 w-full max-w-md p-4"
-      >
-        <div className="absolute inset-0 rounded-3xl bg-gradient-to-r from-cyan-500 via-purple-500 to-cyan-500 opacity-75 blur-lg animate-shimmer bg-[length:200%_100%]" />
+      {/* CARD - Simplified animations */}
+      <div className="relative z-10 w-full max-w-md p-4 animate-fade-in">
+        <div className="absolute inset-0 rounded-3xl bg-gradient-to-r 
+                        from-cyan-500/20 via-purple-500/20 to-cyan-500/20 blur-md" />
 
-        <div className="relative bg-black/80 backdrop-blur-3xl rounded-[22px] border border-white/10 p-8 shadow-2xl">
+        <div className="relative bg-black/80 backdrop-blur-xl rounded-[22px] 
+                        border border-white/10 p-8 shadow-2xl">
           {/* HEADER */}
           <div className="mb-10 text-center">
-            <motion.div
-              whileHover={{ rotate: 360, scale: 1.1 }}
-              className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-500/20 to-purple-500/20 border border-white/5 mb-4"
-            >
+            <div className="inline-flex items-center justify-center w-12 h-12 
+                            rounded-xl bg-gradient-to-tr from-cyan-500/20 to-purple-500/20 
+                            border border-white/5 mb-4">
               <Zap className="w-6 h-6 text-cyan-400 fill-current" />
-            </motion.div>
+            </div>
             <h2 className="text-3xl font-bold text-white">
               Welcome{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-purple-400">
+              <span className="text-transparent bg-clip-text bg-gradient-to-r 
+                             from-cyan-400 to-purple-400">
                 Back
               </span>
             </h2>
@@ -146,7 +126,9 @@ function Login() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                className="w-full bg-transparent border-b border-slate-700 py-3 pl-8 pr-4 text-white focus:outline-none focus:border-cyan-500"
+                className="w-full bg-transparent border-b border-slate-700 py-3 pl-8 pr-4 
+                           text-white focus:outline-none focus:border-cyan-500 
+                           transition-colors"
                 placeholder="Email"
               />
             </div>
@@ -159,34 +141,32 @@ function Login() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full bg-transparent border-b border-slate-700 py-3 pl-8 pr-4 text-white focus:outline-none focus:border-purple-500"
+                className="w-full bg-transparent border-b border-slate-700 py-3 pl-8 pr-4 
+                           text-white focus:outline-none focus:border-purple-500 
+                           transition-colors"
                 placeholder="Password"
               />
             </div>
 
             {/* SUBMIT */}
-            <motion.button
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
+            <button
               type="submit"
               disabled={loading}
               className="w-full py-4 bg-white text-black font-bold rounded-xl 
-             cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                         hover:bg-gray-100 active:scale-[0.98]
+                         disabled:opacity-60 disabled:cursor-not-allowed
+                         transition-all duration-200"
             >
               {loading ? "AUTHENTICATING..." : "LOGIN"}
               <ArrowRight className="inline ml-2" size={18} />
-            </motion.button>
+            </button>
           </form>
 
           {/* ERROR */}
           {error && (
-            <motion.p
-              initial={{ opacity: 0, y: -5 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="text-red-400 text-sm text-center mt-4"
-            >
+            <p className="text-red-400 text-sm text-center mt-4 animate-fade-in">
               {error}
-            </motion.p>
+            </p>
           )}
 
           <div className="mt-8 text-center">
@@ -201,7 +181,7 @@ function Login() {
             </p>
           </div>
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

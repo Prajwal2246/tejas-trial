@@ -1,8 +1,7 @@
 import React, { lazy, Suspense, useEffect } from "react";
 import { createBrowserRouter, RouterProvider, useNavigate } from "react-router-dom";
-import { onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "./firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "./firebase";
 
 // ===== EAGER IMPORTS (Critical) =====
 import Layout from "./components/Layout";
@@ -13,30 +12,20 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import "./App.css";
 
 // ===== LAZY LOADED IMPORTS =====
-
-// Home
 const StudentHomePage = lazy(() => import("./components/StudentHomePage"));
 const TutorHomePage = lazy(() => import("./components/TutorHomePage"));
-
-// Sessions
 const TutorSessionHistory = lazy(() => import("./components/TutorSessionHistory"));
 const StudentSessionHistory = lazy(() => import("./components/StudentSessionHistory"));
-
-// Features
 const AskQuestion = lazy(() => import("./components/AskQuestion"));
 const AdminDashboard = lazy(() => import("./components/AdminDashboard"));
-
-// Questions
 const AllQuestionsStudent = lazy(() => import("./components/AllQuestionsStudent"));
 const AllQuestionsTutor = lazy(() => import("./components/AllQuestionsTutor"));
 const TutorQuestionDetail = lazy(() => import("./components/TutorQuestionDetail"));
 const StudentQuestionDetail = lazy(() => import("./components/StudentQuestionDetail"));
 const AcceptQuestionPage = lazy(() => import("./components/AcceptQuestionPage"));
-
-// Video
 const VideoSession = lazy(() => import("./components/VideoSession"));
 
-// Footer Pages
+// Footer Pages (lowest priority - lazy load)
 const PrivacyPolicy = lazy(() => import("./components/FooterComponents/PrivacyPolicy"));
 const RefundPolicy = lazy(() => import("./components/FooterComponents/RefundPolicy"));
 const AboutUs = lazy(() => import("./components/FooterComponents/AboutUs"));
@@ -47,102 +36,52 @@ const ContactUs = lazy(() => import("./components/FooterComponents/ContactUs"));
 const BecomeMentor = lazy(() => import("./components/FooterComponents/BecomeMentor"));
 const HireFromUs = lazy(() => import("./components/FooterComponents/HireFromUs"));
 
-// ===== FALLBACK LOADER =====
+// ===== LIGHTWEIGHT FALLBACK LOADER =====
 const PageLoader = () => (
-    <div className="min-h-screen flex items-center justify-center bg-black text-white">
-        <p className="animate-pulse">Loading QuizMeBro...</p>
+    <div className="min-h-screen flex items-center justify-center bg-black">
+        <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent 
+                        rounded-full animate-spin" />
     </div>
 );
 
-// ===== ROOT AUTH HANDLER (OPTIMIZED) =====
+// ===== OPTIMIZED ROOT AUTH HANDLER =====
 function RootAuthHandler() {
     const navigate = useNavigate();
 
     useEffect(() => {
-        // 1. FAST CHECK: Try to read from LocalStorage first
-        const checkCache = () => {
-            const cachedRole = localStorage.getItem("userRole");
-            const cachedApproved = localStorage.getItem("userApproved"); // Returns string "true" or "false"
+        // 🚀 INSTANT CHECK: Read from localStorage (cached data)
+        const cachedRole = localStorage.getItem("userRole");
+        const cachedApproved = localStorage.getItem("userApproved");
 
+        // If we have cached data, navigate immediately
+        if (cachedRole) {
             if (cachedRole === "Student") {
-                navigate("/student-home");
-                return true; // Found in cache
-            } 
-            
-            if (cachedRole === "Tutor") {
-                if (cachedApproved === "true") {
-                    navigate("/tutor-home");
-                } else {
-                    // If stored as not approved, safer to send to login/check again
-                    navigate("/login");
-                }
-                return true; // Found in cache
+                navigate("/student-home", { replace: true });
+                return;
+            } else if (cachedRole === "Tutor" && cachedApproved === "true") {
+                navigate("/tutor-home", { replace: true });
+                return;
             }
-            
-            return false; // Not found, proceed to Firebase
-        };
-
-        const isCached = checkCache();
-
-        // 2. SLOW CHECK: If not in cache, ask Firebase
-        if (!isCached) {
-            const unsubscribe = onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    try {
-                        const userDocRef = doc(db, "users", user.uid);
-                        const userDoc = await getDoc(userDocRef);
-
-                        if (userDoc.exists()) {
-                            const userData = userDoc.data();
-                            
-                            // Refresh cache for next time
-                            localStorage.setItem("userRole", userData.role);
-                            localStorage.setItem("userApproved", String(userData.isApproved));
-
-                            if (userData.role === "Tutor") {
-                                if (userData.isApproved === false) {
-                                    await signOut(auth);
-                                    navigate("/login");
-                                } else {
-                                    navigate("/tutor-home");
-                                }
-                            } else {
-                                navigate("/student-home");
-                            }
-                        } else {
-                            navigate("/login");
-                        }
-                    } catch (err) {
-                        console.error(err);
-                        navigate("/login");
-                    }
-                } else {
-                    navigate("/login");
-                }
-            });
-
-            return () => unsubscribe();
         }
+
+        // 🔍 FALLBACK: Check Firebase auth state (only if no cache)
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+            if (!user) {
+                navigate("/login", { replace: true });
+            } else {
+                // User is logged in but no cache - redirect to login to refresh cache
+                navigate("/login", { replace: true });
+            }
+        });
+
+        return () => unsubscribe();
     }, [navigate]);
 
-    // RENDER SKELETON UI (Instant Visual Feedback)
+    // MINIMAL skeleton UI
     return (
-        <div className="min-h-screen bg-slate-950 p-6 space-y-8 animate-pulse">
-            {/* Fake Header */}
-            <div className="h-8 w-48 bg-slate-800 rounded"></div>
-            
-            {/* Fake Hero Text */}
-            <div className="space-y-3">
-                <div className="h-12 w-3/4 bg-slate-800 rounded"></div>
-                <div className="h-4 w-1/2 bg-slate-800 rounded"></div>
-            </div>
-
-            {/* Fake Grid Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="h-40 bg-slate-900 border border-slate-800 rounded-xl"></div>
-                <div className="h-40 bg-slate-900 border border-slate-800 rounded-xl"></div>
-                <div className="h-40 bg-slate-900 border border-slate-800 rounded-xl"></div>
-            </div>
+        <div className="min-h-screen bg-slate-950 flex items-center justify-center">
+            <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent 
+                            rounded-full animate-spin" />
         </div>
     );
 }
@@ -150,13 +89,12 @@ function RootAuthHandler() {
 // ===== APP =====
 function App() {
     const router = createBrowserRouter([
-        // 1. The Root Redirector (Runs first at "quizmebro.tech/")
         {
             path: "/",
             element: <RootAuthHandler />,
         },
 
-        // 2. Public Routes (NO Sidebar/Layout)
+        // Public Routes
         {
             path: "/login",
             element: <Login />,
@@ -166,11 +104,10 @@ function App() {
             element: <Signup />,
         },
 
-        // 3. Protected Routes (Wrapped in Layout with Sidebar)
+        // Protected Routes
         {
             element: <Layout />, 
             children: [
-                // ---------- HOME ----------
                 {
                     path: "/student-home",
                     element: (
@@ -189,8 +126,6 @@ function App() {
                         </ProtectedRoute>
                     ),
                 },
-
-                // ---------- SESSIONS ----------
                 {
                     path: "/tutor/session-history",
                     element: (
@@ -211,8 +146,6 @@ function App() {
                         </ProtectedRoute>
                     ),
                 },
-
-                // ---------- FEATURES ----------
                 {
                     path: "/ask",
                     element: (
@@ -229,8 +162,6 @@ function App() {
                         </Suspense>
                     ),
                 },
-
-                // ---------- QUESTIONS ----------
                 {
                     path: "/all-question-student",
                     element: (
@@ -271,8 +202,6 @@ function App() {
                         </Suspense>
                     ),
                 },
-
-                // ---------- VIDEO ----------
                 {
                     path: "/session/:roomId",
                     element: (
@@ -289,8 +218,6 @@ function App() {
                         </Suspense>
                     ),
                 },
-
-                // ---------- FOOTER PAGES ----------
                 {
                     path: "/blog",
                     element: <Suspense fallback={<PageLoader />}><Blog /></Suspense>,
