@@ -3,16 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { motion, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { Zap, ArrowRight, Lock, Mail } from "lucide-react";
 import { signInWithEmailAndPassword } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
-import { auth, db } from "../../firebase";
+// REMOVED: doc, getDoc imports (We don't need to fetch data here anymore)
+import { auth } from "../../firebase";
 
-// === SOLUTION 1: PRELOAD FUNCTION ===
-// This starts downloading the dashboard code in the background
-// so it is ready BEFORE the user clicks login.
+// === PRELOAD FUNCTION ===
 const preloadDashboards = () => {
-  // These paths must match where your HomePage files are located
-  // Assuming Login.js is in "components/Login and SignUp/" 
-  // and StudentHomePage is in "components/"
+  // Starts downloading the heavy dashboard files in the background
   import("../StudentHomePage"); 
   import("../TutorHomePage");
 };
@@ -25,7 +21,7 @@ function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // === SOLUTION 1: TRIGGER PRELOAD ===
+  // Trigger preload immediately on mount
   useEffect(() => {
     preloadDashboards();
   }, []);
@@ -44,10 +40,7 @@ function Login() {
   const backgroundY = useTransform(mouseY, [0, window.innerHeight], [20, -20]);
 
   const handleMouseMove = (e) => {
-    // OPTIMIZATION: Stop calculating 3D physics if we are currently logging in.
-    // This frees up the CPU to load the next page faster.
     if (loading) return; 
-    
     x.set(e.clientX);
     y.set(e.clientY);
   };
@@ -56,37 +49,20 @@ function Login() {
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
-      setLoading(true);
-
-      // 🔐 Firebase Auth
-      const userCred = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCred.user;
-
-      // 📦 Firestore profile check
-      const userRef = doc(db, "users", user.uid);
-      const snap = await getDoc(userRef);
-
-      if (!snap.exists()) {
-        await auth.signOut();
-        throw new Error("User profile not found");
-      }
-
-      const userData = snap.data();
-
-      // 🔀 Role-based redirect
-      if (userData.role === "Tutor") {
-        if (userData.isApproved === false) {
-          await auth.signOut();
-          throw new Error("TUTOR_NOT_APPROVED");
-        }
-        navigate("/tutor-home");
-      } else {
-        navigate("/student-home");
-      }
+      // 1. AUTHENTICATE ONLY (Fast)
+      await signInWithEmailAndPassword(auth, email, password);
+      
+      // 2. NAVIGATE IMMEDIATELY to Root ("/")
+      // We do NOT fetch the database here. We let the RootAuthHandler
+      // (in App.js) show the Skeleton UI and handle the routing.
+      navigate("/"); 
+      
     } catch (err) {
       console.error(err);
+      setLoading(false); // Only stop loading on error
 
       if (err.code === "auth/invalid-email") {
         setError("Invalid email address");
@@ -94,18 +70,12 @@ function Login() {
         setError("Invalid Password");
       } else if (
         err.code === "auth/invalid-credential" ||
-        err.code === "auth/wrong-password" ||
         err.code === "auth/user-not-found"
       ) {
         setError("No User Found. Sign up first.");
-      } else if (err.message === "TUTOR_NOT_APPROVED") {
-        setError("Your tutor account is pending admin approval");
       } else {
-        setError(`${err.code}`);
+        setError("Login failed. Please try again.");
       }
-      // Only set loading false if there was an error. 
-      // If success, keep it true so the 3D animation stays frozen during redirect.
-      setLoading(false);
     }
   };
 
