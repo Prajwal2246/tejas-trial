@@ -1,184 +1,79 @@
-/* Import Tailwind CSS */
 @import "tailwindcss";
-
-/* Import smooth scrolling optimizations */
-@import './smooth-scroll.css';
-
-/* ===== BASE STYLES ===== */
-
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-}
-
-/* ===== LAYER OPTIMIZATIONS ===== */
-
-/* Create composite layers for better performance */
-@layer base {
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-    -webkit-overflow-scrolling: touch;
-  }
-  
-  body {
-    @apply bg-black text-white;
-    overflow-x: hidden;
-    
-    /* GPU acceleration */
-    transform: translateZ(0);
-    -webkit-transform: translateZ(0);
-    
-    /* Prevent bounce scroll on iOS */
-    overscroll-behavior-y: contain;
-  }
-}
-
-@layer components {
-  /* Optimized button base */
-  button {
-    transform: translateZ(0);
-    -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation;
-  }
-  
-  /* Optimized cards */
-  [class*="bg-slate"] {
-    transform: translateZ(0);
-    backface-visibility: hidden;
-  }
-}
-
-@layer utilities {
-  /* GPU acceleration utility */
-  .gpu {
-    transform: translateZ(0);
-    will-change: transform;
-    backface-visibility: hidden;
-  }
-  
-  /* Smooth interaction */
-  .smooth-interaction {
-    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    transform: translateZ(0);
-  }
-}
-
-/* ===== ANIMATIONS ===== */
-
-/* Optimized fade-in with GPU acceleration */
-@keyframes fadeIn {
+/* App.css */
+@keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translate3d(0, 10px, 0);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
+    transform: translateY(0);
+  }
+}
+
+.animate-entry {
+  opacity: 0; /* Start hidden */
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+/* Stagger delays for items */
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+
+/* ===== OPTIMIZED ANIMATIONS FOR MOBILE ===== */
+
+/* Lightweight fade-in animation */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
-  animation-fill-mode: both;
-  transform: translateZ(0);
 }
 
-/* Entry animations */
+/* Entry animations with delays - Much lighter than Framer Motion */
 .animate-entry {
   animation: fadeIn 0.4s ease-out;
   animation-fill-mode: both;
-  transform: translateZ(0);
 }
 
-.delay-1 { animation-delay: 0.1s; }
-.delay-2 { animation-delay: 0.2s; }
-.delay-3 { animation-delay: 0.3s; }
+.delay-1 {
+  animation-delay: 0.1s;
+}
 
-/* Shimmer effect - optimized */
+.delay-2 {
+  animation-delay: 0.2s;
+}
+
+.delay-3 {
+  animation-delay: 0.3s;
+}
+
+/* Optimized shimmer - Only when needed */
 @keyframes shimmer {
-  0% { background-position: -200% center; }
-  100% { background-position: 200% center; }
+  0% {
+    background-position: -200% center;
+  }
+  100% {
+    background-position: 200% center;
+  }
 }
 
 .animate-shimmer {
   animation: shimmer 3s linear infinite;
-  will-change: background-position;
-  transform: translateZ(0);
-}
-
-/* Spin animation - optimized */
-@keyframes spin {
-  from { transform: rotate(0deg) translateZ(0); }
-  to { transform: rotate(360deg) translateZ(0); }
-}
-
-.animate-spin {
-  animation: spin 1s linear infinite;
-  will-change: transform;
-  transform: translateZ(0);
 }
 
 /* ===== MOBILE OPTIMIZATIONS ===== */
 
-@media (max-width: 768px) {
-  /* Faster animations on mobile */
-  .animate-entry {
-    animation-duration: 0.25s;
-  }
-  
-  .animate-fade-in {
-    animation-duration: 0.2s;
-  }
-  
-  /* Reduce blur on mobile */
-  .backdrop-blur-xl {
-    backdrop-filter: blur(8px);
-  }
-  
-  .backdrop-blur-3xl {
-    backdrop-filter: blur(12px);
-  }
-  
-  /* Disable expensive effects */
-  .blur-\[120px\],
-  .blur-\[80px\] {
-    opacity: 0.2;
-    filter: none;
-  }
-}
-
-/* ===== CUSTOM SCROLLBAR ===== */
-
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: rgb(15 23 42);
-  border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb {
-  background: rgb(51 65 85);
-  border-radius: 4px;
-  transition: background 0.2s;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: rgb(71 85 105);
-}
-
-/* Firefox */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: rgb(51 65 85) rgb(15 23 42);
-}
-
-/* ===== ACCESSIBILITY ===== */
-
+/* Disable animations on low-end devices */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -186,42 +81,56 @@
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
   }
 }
 
-/* ===== FOCUS STYLES ===== */
-
-*:focus-visible {
-  outline: 2px solid rgb(59 130 246);
-  outline-offset: 2px;
+/* Reduce blur effects on mobile for better performance */
+@media (max-width: 768px) {
+  .backdrop-blur-xl {
+    backdrop-filter: blur(8px); /* Reduced from default 24px */
+  }
+  
+  .backdrop-blur-3xl {
+    backdrop-filter: blur(12px); /* Reduced from default 64px */
+  }
+  
+  /* Disable expensive blur backgrounds on mobile */
+  .blur-\[120px\],
+  .blur-\[80px\] {
+    opacity: 0.3; /* Just fade instead of blur */
+    filter: none;
+  }
 }
 
-/* ===== SELECTION ===== */
+/* Force GPU acceleration for smooth interactions */
+.gpu-accelerate {
+  transform: translateZ(0);
+  will-change: transform;
+}
 
-::selection {
-  background-color: rgb(59 130 246 / 0.3);
-  color: white;
+/* Optimize touch interactions */
+button,
+.cursor-pointer {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* Prevent layout shift */
+img,
+video {
+  max-width: 100%;
+  height: auto;
 }
 
 /* ===== PERFORMANCE HINTS ===== */
 
-/* Grid/Flex optimization */
-.grid,
-.flex {
-  contain: layout;
-  transform: translateZ(0);
+/* Tell browser which elements will animate */
+.will-animate {
+  will-change: opacity, transform;
 }
 
-/* Card optimization */
-[class*="rounded-xl"],
-[class*="shadow"] {
-  transform: translateZ(0);
-  backface-visibility: hidden;
+/* Remove will-change after animation */
+.animation-done {
+  will-change: auto;
 }
 
-/* Gradient optimization */
-[class*="bg-gradient"] {
-  will-change: opacity;
-  transform: translateZ(0);
-}

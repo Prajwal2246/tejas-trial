@@ -1,5 +1,5 @@
 /* ===== SMOOTH SCROLLING OPTIMIZATIONS ===== */
-
+@reference "tailwindcss";
 /* Enable smooth scrolling globally */
 html {
   scroll-behavior: smooth;
