@@ -1,68 +1,28 @@
 import React from "react";
-import Header from "./Header";
-import { Outlet, useLocation } from "react-router-dom";
-import Footer from "./Footer";
-import { motion, useScroll, useSpring } from "framer-motion";
+import { Outlet } from "react-router-dom";
+import Sidebar from "./Sidebar"; // Assuming you have this component
 
-const Layout = () => {
-  const location = useLocation();
-
+function Layout() {
   return (
-    <div className="min-h-screen flex flex-col bg-[#050505] text-slate-200 antialiased selection:bg-cyan-500/30 overflow-hidden relative">
+    <div className="flex min-h-screen bg-black gpu-accelerate">
+      {/* Sidebar */}
+      <Sidebar />
       
-      {/* 1. GLOBAL BACKGROUND (Optimized: No JS Parallax) */}
-      <div className="fixed inset-0 z-0 pointer-events-none">
-        
-        {/* Static Blobs (CSS only, 0% CPU Usage) */}
-        <div className="absolute top-[-10%] left-[-10%] w-[800px] h-[800px] bg-cyan-600/10 rounded-full blur-[120px] mix-blend-screen opacity-50" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[800px] h-[800px] bg-purple-600/10 rounded-full blur-[120px] mix-blend-screen opacity-50" />
-        
-        {/* SVG Noise Texture */}
-        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 brightness-100 contrast-150 mix-blend-overlay"></div>
-        
-        {/* Grid Overlay */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#8080800a_1px,transparent_1px),linear-gradient(to_bottom,#8080800a_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
-      </div>
-
-      <Header />
-
-      {/* 2. MAIN CONTENT (Optimized: No Blur Animation) */}
-      <motion.main 
-        key={location.pathname}
-        // ONLY animate Opacity and Y-position.
-        // NEVER animate 'filter' on mobile.
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -10 }}
-        transition={{ duration: 0.3, ease: "easeOut" }}
-        className="flex-1 relative z-10 pt-24 pb-12 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full"
+      {/* Main Content - Optimized for smooth scrolling */}
+      <main 
+        className="flex-1 p-6 overflow-y-auto smooth-scroll-container"
+        style={{
+          // Critical for smooth scrolling
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehavior: 'contain',
+          transform: 'translateZ(0)',
+          willChange: 'scroll-position'
+        }}
       >
         <Outlet />
-      </motion.main>
-
-      <Footer />
-      
-      {/* 3. SCROLL BAR (Kept, but ensure it doesn't block) */}
-      <ScrollProgress />
+      </main>
     </div>
   );
-};
-
-// Optimized Scroll Progress (Uses transform-only)
-const ScrollProgress = () => {
-    const { scrollYProgress } = useScroll();
-    const scaleX = useSpring(scrollYProgress, {
-        stiffness: 100,
-        damping: 30,
-        restDelta: 0.001
-    });
-
-    return (
-        <motion.div
-            className="fixed top-0 left-0 right-0 h-1 bg-gradient-to-r from-cyan-400 via-purple-500 to-cyan-400 origin-left z-[100] shadow-[0_0_10px_rgba(34,211,238,0.7)]"
-            style={{ scaleX }}
-        />
-    );
-};
+}
 
 export default Layout;

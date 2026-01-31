@@ -1,0 +1,397 @@
+/* ===== SMOOTH SCROLLING OPTIMIZATIONS ===== */
+
+/* Enable smooth scrolling globally */
+html {
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch; /* iOS momentum scrolling */
+}
+
+/* Optimize scrolling performance */
+* {
+  /* Hardware acceleration for all elements */
+  -webkit-transform: translateZ(0);
+  transform: translateZ(0);
+  
+  /* Smooth font rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth scrolling container */
+body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  
+  /* Enable GPU acceleration */
+  -webkit-transform: translate3d(0, 0, 0);
+  transform: translate3d(0, 0, 0);
+  
+  /* Prevent scroll bounce on iOS */
+  overscroll-behavior-y: contain;
+}
+
+/* Optimize scrollable containers */
+.scrollable,
+[class*="overflow-y-auto"],
+[class*="overflow-auto"] {
+  /* Smooth momentum scrolling */
+  -webkit-overflow-scrolling: touch;
+  
+  /* GPU acceleration */
+  will-change: scroll-position;
+  transform: translateZ(0);
+  
+  /* Prevent jank */
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* ===== ELIMINATE SCROLL JANK ===== */
+
+/* Prevent layout shifts during scroll */
+img,
+video,
+iframe {
+  /* Force size before load */
+  content-visibility: auto;
+  
+  /* Reduce repaints */
+  will-change: auto;
+  transform: translateZ(0);
+}
+
+/* Optimize heavy elements */
+.bg-blur,
+[class*="backdrop-blur"],
+[class*="shadow"] {
+  /* Reduce paint on scroll */
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Optimize animations during scroll */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0); /* Use translate3d for GPU */
+  }
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+.animate-fade-in,
+.animate-entry {
+  animation: fadeIn 0.4s ease-out;
+  animation-fill-mode: both;
+  
+  /* GPU acceleration */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* Stagger delays */
+.delay-1 { animation-delay: 0.1s; }
+.delay-2 { animation-delay: 0.2s; }
+.delay-3 { animation-delay: 0.3s; }
+
+/* ===== MOBILE SPECIFIC OPTIMIZATIONS ===== */
+
+@media (max-width: 768px) {
+  /* Faster scroll on mobile */
+  html {
+    scroll-behavior: smooth;
+  }
+  
+  /* Reduce blur for better performance */
+  .backdrop-blur-xl {
+    backdrop-filter: blur(8px);
+  }
+  
+  .backdrop-blur-3xl {
+    backdrop-filter: blur(12px);
+  }
+  
+  /* Disable expensive effects while scrolling */
+  .blur-\[120px\],
+  .blur-\[80px\] {
+    opacity: 0.3;
+    filter: none; /* Remove blur entirely on mobile */
+  }
+  
+  /* Optimize animations */
+  .animate-pulse {
+    animation: none; /* Disable on mobile */
+  }
+  
+  /* Reduce animation duration */
+  .animate-entry {
+    animation-duration: 0.2s;
+  }
+}
+
+/* ===== PREVENT SCROLL INTERFERENCE ===== */
+
+/* Stop animations from blocking scroll */
+button,
+a,
+[class*="cursor-pointer"] {
+  /* Instant tap feedback */
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  
+  /* Smooth transitions */
+  transition: transform 0.15s ease-out, opacity 0.15s ease-out;
+  
+  /* GPU acceleration */
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* Optimize hover/active states */
+.hover\:scale-105:hover,
+.group:hover .group-hover\:scale-105 {
+  transform: scale(1.05) translateZ(0);
+}
+
+.active\:scale-\[0\.98\]:active,
+.active\:scale-95:active {
+  transform: scale(0.98) translateZ(0);
+}
+
+/* ===== REDUCE PAINT OPERATIONS ===== */
+
+/* Isolate animated elements */
+.animate-spin,
+.animate-pulse,
+[class*="animate-"] {
+  /* Create new layer */
+  will-change: transform;
+  transform: translateZ(0);
+  
+  /* Reduce repaints */
+  contain: layout style paint;
+}
+
+/* Optimize fixed/sticky elements */
+.fixed,
+.sticky,
+[class*="fixed"],
+[class*="sticky"] {
+  /* Create layer */
+  will-change: transform;
+  transform: translateZ(0);
+  
+  /* Prevent reflow */
+  contain: layout;
+}
+
+/* ===== CUSTOM SCROLLBAR (Optional - improves UX) ===== */
+
+/* Modern scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgb(15 23 42); /* slate-900 */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(51 65 85); /* slate-700 */
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(71 85 105); /* slate-600 */
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(51 65 85) rgb(15 23 42);
+}
+
+/* ===== PERFORMANCE HINTS ===== */
+
+/* Optimize grid/flex layouts */
+.grid,
+[class*="grid"],
+.flex,
+[class*="flex"] {
+  /* Hint to browser */
+  contain: layout;
+  
+  /* Prevent jank */
+  transform: translateZ(0);
+}
+
+/* Optimize cards/containers */
+[class*="rounded"],
+[class*="border"],
+[class*="shadow"] {
+  /* Reduce repaints */
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* ===== DISABLE PROBLEMATIC ANIMATIONS ===== */
+
+/* For users who prefer reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ===== INTERSECTION OBSERVER OPTIMIZATION ===== */
+
+/* Elements that enter viewport */
+.lazy-load,
+[data-lazy] {
+  /* Hint for content visibility */
+  content-visibility: auto;
+  contain-intrinsic-size: 500px; /* Estimated height */
+}
+
+/* ===== TEXT RENDERING ===== */
+
+/* Smooth text rendering */
+body,
+input,
+textarea,
+button {
+  text-rendering: optimizeSpeed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optimize heading rendering */
+h1, h2, h3, h4, h5, h6 {
+  text-rendering: optimizeLegibility;
+}
+
+/* ===== PREVENT SCROLL CHAINING ===== */
+
+/* Stop scroll from propagating to parent */
+.modal,
+.sidebar,
+[role="dialog"] {
+  overscroll-behavior: contain;
+}
+
+/* ===== GPU ACCELERATION UTILITIES ===== */
+
+/* Force GPU rendering */
+.gpu-accelerate {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  perspective: 1000px;
+}
+
+/* Remove will-change after animation */
+.animation-done {
+  will-change: auto;
+}
+
+/* ===== COMPOSITE LAYER HINTS ===== */
+
+/* Create composite layers for heavy elements */
+.composite-layer {
+  /* Force new layer */
+  transform: translateZ(0);
+  will-change: transform;
+  
+  /* Optimize painting */
+  contain: layout style paint;
+  
+  /* Reduce repaints */
+  backface-visibility: hidden;
+}
+
+/* ===== SMOOTH SCROLL SNAP (Optional) ===== */
+
+/* If you want snap scrolling */
+.snap-container {
+  scroll-snap-type: y mandatory;
+  scroll-behavior: smooth;
+}
+
+.snap-item {
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+}
+
+/* ===== PREVENT FLICKERING ===== */
+
+/* Fix flickering on transitions */
+* {
+  -webkit-backface-visibility: hidden;
+  -moz-backface-visibility: hidden;
+  -ms-backface-visibility: hidden;
+  backface-visibility: hidden;
+  
+  -webkit-perspective: 1000;
+  -moz-perspective: 1000;
+  -ms-perspective: 1000;
+  perspective: 1000;
+}
+
+/* ===== OPTIMIZE GRADIENTS ===== */
+
+/* Gradients can cause jank */
+[class*="bg-gradient"],
+[class*="gradient"] {
+  /* Create layer */
+  will-change: opacity;
+  transform: translateZ(0);
+  
+  /* Reduce repaints */
+  backface-visibility: hidden;
+}
+
+/* ===== SMOOTH TRANSITIONS ===== */
+
+/* Global smooth transitions */
+.transition,
+[class*="transition"] {
+  /* Use transform for better performance */
+  transition-property: transform, opacity;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* GPU acceleration */
+  will-change: transform, opacity;
+  transform: translateZ(0);
+}
+
+/* ===== PREVENT LAYOUT SHIFT ===== */
+
+/* Reserve space for images */
+img[width][height] {
+  height: auto;
+}
+
+/* Aspect ratio boxes */
+.aspect-ratio-box {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 ratio */
+}
+
+.aspect-ratio-box > * {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
