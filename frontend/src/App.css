@@ -1,123 +1,64 @@
 @import "tailwindcss";
 
-/* ===== 1. CORE PERFORMANCE & RESET ===== */
 :root {
-  --bg-dark: #020617; /* slate-950 */
-  --bg-card: #0f172a; /* slate-900 */
+  --bg-dark: #020617;
 }
 
 html {
-  /* CRITICAL: 'auto' prevents the scroll-hitching/latency common on mobile */
-  scroll-behavior: auto !important; 
+  /* Fixes the 'stuck' feeling by using native touch physics */
+  scroll-behavior: auto !important;
   height: -webkit-fill-available;
-  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  margin: 0;
-  padding: 0;
   background-color: var(--bg-dark);
   color: white;
-  overflow-x: hidden; 
-  width: 100%;
-  
-  /* Prioritize vertical scrolling and ignore side-jitters */
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
-  
-  /* Prevents the 'rubber-band' effect from locking the UI */
-  overscroll-behavior-y: contain;
-  
-  /* Text smoothing */
+  overscroll-behavior-y: contain; /* Stops background bounce */
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== 2. CONSOLIDATED HARDWARE ACCELERATION ===== */
-/* This block handles entry animations and general smoothness */
-.animate-entry, 
-.gpu-layer,
-.video-tile {
+/* ===== GPU ACCELERATION & CLS FIX ===== */
+.animate-entry {
   opacity: 0;
-  /* Tell the GPU to prepare these properties */
   will-change: transform, opacity;
+  /* translate3d forces the phone to use the GPU Chip, not the CPU */
+  transform: translate3d(0, 20px, 0); 
+  animation: fadeInUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
   
-  /* Force a new compositor layer */
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  perspective: 1000px;
-  transform: translate3d(0, 0, 0); 
-  
-  /* The actual animation */
-  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-  
-  /* UP-SCROLL FIX: Stops the browser from repainting off-screen cards */
+  /* CRITICAL: content-visibility solves Up-Scroll lag by not 
+     re-rendering cards until they are needed */
   content-visibility: auto;
-  contain-intrinsic-size: 0 100px; 
+  contain-intrinsic-size: 0 150px; 
 }
 
-/* ===== 3. MOBILE-SPECIFIC OPTIMIZATIONS ===== */
-@media (max-width: 768px) {
-  /* High-end blurs cause massive lag during scrolling on mobile GPUs */
-  .backdrop-blur-xl, .backdrop-blur-3xl {
-    backdrop-filter: blur(8px) !important;
-    -webkit-backdrop-filter: blur(8px) !important;
-  }
-
-  /* Prevent layout shifts */
-  img {
-    content-visibility: auto;
-  }
-
-  /* Disable hover effects on touch devices to prevent "sticky" states */
-  @media (hover: none) {
-    .hover\:scale-105:hover,
-    .hover\:shadow-xl:hover {
-      transform: none !important;
-      box-shadow: none !important;
-    }
-  }
-}
-
-/* ===== 4. REFINED ANIMATIONS ===== */
 @keyframes fadeInUp {
-  from {
-    opacity: 0;
-    /* Use 3D for better GPU offloading */
-    transform: translate3d(0, 20px, 0);
-  }
   to {
     opacity: 1;
     transform: translate3d(0, 0, 0);
   }
 }
 
-/* Delay Utilities */
-.delay-1 { animation-delay: 100ms; }
-.delay-2 { animation-delay: 200ms; }
-.delay-3 { animation-delay: 300ms; }
-
-/* ===== 5. UI COMPONENTS (Scrollbars & Helpers) ===== */
-::-webkit-scrollbar {
-  width: 5px;
-}
-::-webkit-scrollbar-track {
-  background: var(--bg-dark);
-}
-::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 100px;
+/* ===== PREVENT STICKY STATES ===== */
+@media (hover: none) {
+  /* Prevents cards from staying "highlighted" after you tap them on mobile */
+  .group:active {
+    background-color: #1e293b !important;
+  }
 }
 
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
+/* Delays */
+.delay-1 { animation-delay: 80ms; }
+.delay-2 { animation-delay: 160ms; }
+.delay-3 { animation-delay: 240ms; }
 
-/* Add a helper for clickable items to avoid "grey box" flash on tap */
+/* Global fix for tap lag */
 * {
   -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
 }
+
+/* Clean scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
