@@ -1,64 +1,58 @@
 @import "tailwindcss";
 
-:root {
-  --bg-dark: #020617;
-}
-
+/* ===== CORE SMOOTHING ===== */
 html {
-  /* Fixes the 'stuck' feeling by using native touch physics */
+  /* Let the mobile OS handle the scroll physics natively */
   scroll-behavior: auto !important;
   height: -webkit-fill-available;
 }
 
 body {
-  background-color: var(--bg-dark);
-  color: white;
+  margin: 0;
+  padding: 0;
+  background-color: #050505;
+  color: #e2e8f0;
+  
+  /* Fixes 'wobble' and ensures vertical scroll takes priority */
+  overflow-x: hidden;
+  width: 100%;
   touch-action: pan-y;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior-y: contain; /* Stops background bounce */
+  
+  /* Prevents the 'rubber-band' effect from jittering the layout */
+  overscroll-behavior-y: contain;
   -webkit-font-smoothing: antialiased;
 }
 
-/* ===== GPU ACCELERATION & CLS FIX ===== */
-.animate-entry {
-  opacity: 0;
+/* ===== GPU ACCELERATION (The Smoothness Engine) ===== */
+.animate-entry, .gpu-layer {
   will-change: transform, opacity;
-  /* translate3d forces the phone to use the GPU Chip, not the CPU */
-  transform: translate3d(0, 20px, 0); 
-  animation: fadeInUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  
-  /* CRITICAL: content-visibility solves Up-Scroll lag by not 
-     re-rendering cards until they are needed */
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  perspective: 1000px;
+  /* translate3d forces the phone's Graphics chip to handle these elements */
+  transform: translate3d(0, 0, 0); 
+}
+
+/* UP-SCROLL LATENCY FIX: 
+   This ensures the browser doesn't struggle when you scroll back up. 
+*/
+main {
   content-visibility: auto;
-  contain-intrinsic-size: 0 150px; 
+  contain-intrinsic-size: 1000px; /* Placeholder size for layout stability */
 }
 
-@keyframes fadeInUp {
-  to {
-    opacity: 1;
-    transform: translate3d(0, 0, 0);
-  }
-}
-
-/* ===== PREVENT STICKY STATES ===== */
-@media (hover: none) {
-  /* Prevents cards from staying "highlighted" after you tap them on mobile */
-  .group:active {
-    background-color: #1e293b !important;
-  }
-}
-
-/* Delays */
-.delay-1 { animation-delay: 80ms; }
-.delay-2 { animation-delay: 160ms; }
-.delay-3 { animation-delay: 240ms; }
-
-/* Global fix for tap lag */
+/* Remove tap highlight on mobile for a cleaner feel */
 * {
   -webkit-tap-highlight-color: transparent;
   box-sizing: border-box;
 }
 
-/* Clean scrollbar */
-::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+/* Re-styled Slim Scrollbar */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b; /* slate-800 */
+  border-radius: 10px;
+}
