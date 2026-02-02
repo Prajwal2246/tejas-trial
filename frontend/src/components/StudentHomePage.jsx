@@ -68,6 +68,8 @@ const ActionCard = ({ icon, title, desc, onClick, label }) => {
       onClick={onClick}
       className="group relative p-5 rounded-xl bg-slate-900 border border-slate-800 
                  active:border-blue-500/50 cursor-pointer transition-colors"
+
+      style={{ backfaceVisibility: "hidden", transform: "translateZ(0)" }}
     >
       <div className="relative z-10 flex flex-col items-start h-full">
         <div className="p-3 rounded-lg bg-slate-800 mb-3">
