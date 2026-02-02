@@ -39,7 +39,7 @@ const Header = () => {
   const authNavLinks = [
     { name: "Ask a Question", path: "/ask" },
     { name: "My Questions", path: "/all-question-student" },
-    { name: "Session History", path: "/sessions" },
+    { name: "Session History", path: "/student-session-history" },
   ];
 
   return (

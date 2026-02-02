@@ -14,7 +14,8 @@ function StudentHomePage() {
       {/* Hero Section - Keep H1 static for LCP score, animate the P */}
       <div className="text-center space-y-3">
         <h1 className="text-3xl md:text-5xl font-bold tracking-tight text-white">
-          Hello, <span className="text-blue-500">{user?.name || "Student"}</span>
+          Hello,{" "}
+          <span className="text-blue-500">{user?.name || "Student"}</span>
         </h1>
         <p className="text-base text-slate-400 max-w-xl mx-auto animate-entry">
           Ready to learn? Ask a question or review your past sessions.
@@ -64,11 +65,11 @@ const ActionCard = ({ icon, title, desc, onClick, label }) => {
       transition={{ type: "spring", stiffness: 400, damping: 25 }} // Snappier performance
       onClick={onClick}
       className="group relative p-5 rounded-xl bg-slate-900 border border-slate-800 
-                 active:border-blue-500/50 cursor-pointer transition-colors h-full"
-      style={{ 
-        backfaceVisibility: "hidden", 
+                 active:border-blue-500/50 cursor-pointer transition-colors h-[250px]"
+      style={{
+        backfaceVisibility: "hidden",
         WebkitBackfaceVisibility: "hidden",
-        transform: "translateZ(0)" 
+        transform: "translateZ(0)",
       }}
     >
       <div className="relative z-10 flex flex-col items-start h-full">
@@ -78,7 +79,8 @@ const ActionCard = ({ icon, title, desc, onClick, label }) => {
         <h3 className="text-lg font-semibold text-white mb-1">{title}</h3>
         <p className="text-slate-400 text-sm mb-4 flex-1">{desc}</p>
         <div className="flex items-center text-blue-400 text-sm font-medium">
-          {label} <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
+          {label}{" "}
+          <ArrowRight className="w-4 h-4 ml-1 group-hover:translate-x-1 transition-transform" />
         </div>
       </div>
     </motion.div>
