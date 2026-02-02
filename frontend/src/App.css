@@ -1,76 +1,119 @@
 @import "tailwindcss";
 
-/* ===== CORE SMOOTHING ===== */
+/* ===== CORE SMOOTHING & RESET ===== */
+:root {
+  /* Using standard system fonts for better performance */
+  --bg-dark: #020617; /* slate-950 */
+  --bg-card: #0f172a; /* slate-900 */
+}
+
 html {
-  /* This works for desktop and some mobile browsers */
-  scroll-behavior: smooth !important;
+  /* Smooth for anchor links, but we use 'auto' on body for better touch response */
+  scroll-behavior: smooth;
+  /* Fixes height issues in mobile browsers */
+  height: -webkit-fill-available;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: #020617; /* slate-950 */
+  background-color: var(--bg-dark);
   color: white;
-  /* Prevent horizontal wobble on mobile */
+  
+  /* Prevent horizontal wobble and allow smooth vertical flow */
   overflow-x: hidden; 
-  /* Essential for iOS momentum scrolling */
+  width: 100%;
+  
+  /* iOS Momentum Scrolling */
   -webkit-overflow-scrolling: touch;
+  
+  /* Stops the background from "bouncing" when you reach the top/bottom */
+  overscroll-behavior-y: none;
+  
+  /* Text rendering optimization */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== REPLACING THE LAGGY '*' SELECTOR ===== */
-/* Only hardware accelerate things that actually move */
+/* ===== HARDWARE ACCELERATION (The Smoothness Secret) ===== */
+/* Applying this to specific classes instead of '*' prevents memory bloat */
 .animate-entry, 
-.animate-fade-in,
-.gpu-layer {
-  transform: translateZ(0);
+.gpu-layer,
+.video-tile { /* Useful for your Meet clone */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  perspective: 1000px;
+  transform: translate3d(0, 0, 0); 
   will-change: transform, opacity;
 }
 
-/* ===== MOBILE SCROLL FIXES ===== */
+/* ===== MOBILE-SPECIFIC OPTIMIZATIONS ===== */
 @media (max-width: 768px) {
-  /* Disable heavy blurs that kill mobile FPS during scroll */
+  /* Reduce heavy blurs: blurs are the #1 killer of scroll FPS on mobile */
   .backdrop-blur-xl, .backdrop-blur-3xl {
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
   }
 
-  /* Prevent 'sticky' hover states on mobile touch */
+  /* Optimize images to prevent layout shift during scrolling */
+  img {
+    content-visibility: auto;
+  }
+
+  /* Disable hover scales on mobile - they often "stick" and feel laggy */
   @media (hover: none) {
-    .hover\:scale-105:hover {
+    .hover\:scale-105:hover,
+    .hover\:shadow-xl:hover {
       transform: none !important;
+      box-shadow: none !important;
     }
   }
 }
 
-/* ===== ANIMATIONS ===== */
+/* ===== REFINED ANIMATIONS ===== */
+/* Using transform3d for better GPU offloading */
 @keyframes fadeInUp {
   from {
     opacity: 0;
-    transform: translateY(15px);
+    transform: translate3d(0, 20px, 0);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: translate3d(0, 0, 0);
   }
 }
 
 .animate-entry {
   opacity: 0;
-  animation: fadeInUp 0.5s ease-out forwards;
+  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-.delay-1 { animation-delay: 0.1s; }
-.delay-2 { animation-delay: 0.2s; }
-.delay-3 { animation-delay: 0.3s; }
+/* Delay Utilities */
+.delay-1 { animation-delay: 100ms; }
+.delay-2 { animation-delay: 200ms; }
+.delay-3 { animation-delay: 300ms; }
 
-/* ===== MODERN SCROLLBAR ===== */
+/* ===== MODERN SLIM SCROLLBAR ===== */
+/* Thin scrollbars look better on high-res mobile screens */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 ::-webkit-scrollbar-track {
-  background: #0f172a;
+  background: var(--bg-dark);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 10px;
+  background: #334155; /* slate-700 */
+  border-radius: 100px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569; /* slate-600 */
+}
+
+/* ===== HELPERS FOR QUIZ/LISTS ===== */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
