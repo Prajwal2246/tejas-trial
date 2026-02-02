@@ -66,6 +66,7 @@ const ActionCard = ({ icon, title, desc, onClick, label }) => {
     <motion.div
       whileTap={{ scale: 0.98 }}
       onClick={onClick}
+      tapPropagation={true}
       className="group relative p-5 rounded-xl bg-slate-900 border border-slate-800 
                  active:border-blue-500/50 cursor-pointer transition-colors"
 

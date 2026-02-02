@@ -1,50 +1,75 @@
 @import "tailwindcss";
 
-/* ===== CORE SMOOTHING & RESET ===== */
+/* ===== 1. CORE PERFORMANCE & RESET ===== */
 :root {
-  /* Using standard system fonts for better performance */
   --bg-dark: #020617; /* slate-950 */
   --bg-card: #0f172a; /* slate-900 */
 }
 
 html {
-  /* Change 'smooth' to 'auto' for mobile to keep touch response instant */
-  scroll-behavior: auto; 
+  /* CRITICAL: 'auto' prevents the scroll-hitching/latency common on mobile */
+  scroll-behavior: auto !important; 
   height: -webkit-fill-available;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
-  /* This prevents the "sticking" feeling when swiping fast */
+  margin: 0;
+  padding: 0;
+  background-color: var(--bg-dark);
+  color: white;
+  overflow-x: hidden; 
+  width: 100%;
+  
+  /* Prioritize vertical scrolling and ignore side-jitters */
   touch-action: pan-y;
-  overscroll-behavior-y: contain; 
+  -webkit-overflow-scrolling: touch;
+  
+  /* Prevents the 'rubber-band' effect from locking the UI */
+  overscroll-behavior-y: contain;
+  
+  /* Text smoothing */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* ===== HARDWARE ACCELERATION (The Smoothness Secret) ===== */
-/* Applying this to specific classes instead of '*' prevents memory bloat */
+/* ===== 2. CONSOLIDATED HARDWARE ACCELERATION ===== */
+/* This block handles entry animations and general smoothness */
 .animate-entry, 
 .gpu-layer,
-.video-tile { /* Useful for your Meet clone */
+.video-tile {
+  opacity: 0;
+  /* Tell the GPU to prepare these properties */
+  will-change: transform, opacity;
+  
+  /* Force a new compositor layer */
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
   perspective: 1000px;
   transform: translate3d(0, 0, 0); 
-  will-change: transform, opacity;
+  
+  /* The actual animation */
+  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  
+  /* UP-SCROLL FIX: Stops the browser from repainting off-screen cards */
+  content-visibility: auto;
+  contain-intrinsic-size: 0 100px; 
 }
 
-/* ===== MOBILE-SPECIFIC OPTIMIZATIONS ===== */
+/* ===== 3. MOBILE-SPECIFIC OPTIMIZATIONS ===== */
 @media (max-width: 768px) {
-  /* Reduce heavy blurs: blurs are the #1 killer of scroll FPS on mobile */
+  /* High-end blurs cause massive lag during scrolling on mobile GPUs */
   .backdrop-blur-xl, .backdrop-blur-3xl {
     backdrop-filter: blur(8px) !important;
     -webkit-backdrop-filter: blur(8px) !important;
   }
 
-  /* Optimize images to prevent layout shift during scrolling */
+  /* Prevent layout shifts */
   img {
     content-visibility: auto;
   }
 
-  /* Disable hover scales on mobile - they often "stick" and feel laggy */
+  /* Disable hover effects on touch devices to prevent "sticky" states */
   @media (hover: none) {
     .hover\:scale-105:hover,
     .hover\:shadow-xl:hover {
@@ -54,11 +79,11 @@ body {
   }
 }
 
-/* ===== REFINED ANIMATIONS ===== */
-/* Using transform3d for better GPU offloading */
+/* ===== 4. REFINED ANIMATIONS ===== */
 @keyframes fadeInUp {
   from {
     opacity: 0;
+    /* Use 3D for better GPU offloading */
     transform: translate3d(0, 20px, 0);
   }
   to {
@@ -67,18 +92,12 @@ body {
   }
 }
 
-.animate-entry {
-  opacity: 0;
-  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
-}
-
 /* Delay Utilities */
 .delay-1 { animation-delay: 100ms; }
 .delay-2 { animation-delay: 200ms; }
 .delay-3 { animation-delay: 300ms; }
 
-/* ===== MODERN SLIM SCROLLBAR ===== */
-/* Thin scrollbars look better on high-res mobile screens */
+/* ===== 5. UI COMPONENTS (Scrollbars & Helpers) ===== */
 ::-webkit-scrollbar {
   width: 5px;
 }
@@ -86,14 +105,10 @@ body {
   background: var(--bg-dark);
 }
 ::-webkit-scrollbar-thumb {
-  background: #334155; /* slate-700 */
+  background: #334155;
   border-radius: 100px;
 }
-::-webkit-scrollbar-thumb:hover {
-  background: #475569; /* slate-600 */
-}
 
-/* ===== HELPERS FOR QUIZ/LISTS ===== */
 .no-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
@@ -102,9 +117,7 @@ body {
   display: none;
 }
 
-.animate-entry {
-  opacity: 0;
-  /* Use 'will-change' so the GPU prepares the layer before the animation starts */
-  will-change: transform, opacity;
-  animation: fadeInUp 0.6s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+/* Add a helper for clickable items to avoid "grey box" flash on tap */
+* {
+  -webkit-tap-highlight-color: transparent;
 }
