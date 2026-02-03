@@ -2,40 +2,17 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Clock, ArrowLeft } from "lucide-react";
-import {runTransaction,onSnapshot } from "firebase/firestore";
-
 import {
   doc,
-  getDoc,
-  updateDoc,
-  serverTimestamp,
   collection,
-  setDoc,
+  runTransaction,
+  serverTimestamp,
+  onSnapshot
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 
-
-useEffect(() => {
-  const ref = doc(db, "questions", id);
-  
-  // Use onSnapshot instead of getDoc for real-time updates
-  const unsubscribe = onSnapshot(ref, (snap) => {
-    if (snap.exists()) {
-      setQuestion({ id: snap.id, ...snap.data() });
-    } else {
-      setQuestion(null);
-    }
-    setLoading(false);
-  }, (error) => {
-    console.error("Error listening to question:", error);
-    setLoading(false);
-  });
-
-  return () => unsubscribe(); // Cleanup listener on unmount
-}, [id]);
-
-/* 🔹 Firestore-safe timeAgo */
+/* 🔹 Firestore-safe timeAgo helper */
 const timeAgo = (timestamp) => {
   if (!timestamp) return "Just now";
   const date = timestamp.toDate();
@@ -46,93 +23,99 @@ const timeAgo = (timestamp) => {
 };
 
 export default function TutorQuestionDetail() {
-  const { id } = useParams(); // Firestore doc id
+  const { id } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth(); // logged-in tutor
+  const { user } = useAuth();
 
   const [question, setQuestion] = useState(null);
   const [loading, setLoading] = useState(true);
   const [accepting, setAccepting] = useState(false);
 
-  /* 🔹 Fetch question */
+  /* 🔹 Real-time listener for question updates */
   useEffect(() => {
-    const fetchQuestion = async () => {
-      try {
-        const ref = doc(db, "questions", id);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-          setQuestion({ id: snap.id, ...snap.data() });
-        }
-      } catch (error) {
-        console.error("Error fetching question:", error);
-      } finally {
-        setLoading(false);
+    if (!id) return;
+
+    const ref = doc(db, "questions", id);
+    
+    // This updates the UI immediately if the status changes in the DB
+    const unsubscribe = onSnapshot(ref, (snap) => {
+      if (snap.exists()) {
+        setQuestion({ id: snap.id, ...snap.data() });
+      } else {
+        setQuestion(null);
       }
-    };
-    fetchQuestion();
+      setLoading(false);
+    }, (error) => {
+      console.error("Error listening to question:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe(); 
   }, [id]);
 
-  /* 🔹 Accept & Start Session */
+  /* 🔹 Accept & Start Session with Transaction */
+  const acceptQuestion = async () => {
+    if (!user || !question) return;
+    setAccepting(true);
 
-const acceptQuestion = async () => {
-  if (!user || !question) return;
-  setAccepting(true);
+    try {
+      await runTransaction(db, async (transaction) => {
+        const questionRef = doc(db, "questions", id);
+        const questionSnap = await transaction.get(questionRef);
 
-  try {
-    // We use runTransaction to ensure atomicity
-    await runTransaction(db, async (transaction) => {
-      const questionRef = doc(db, "questions", id);
-      const questionSnap = await transaction.get(questionRef);
+        if (!questionSnap.exists()) {
+          throw "Question no longer exists.";
+        }
 
-      if (!questionSnap.exists()) {
-        throw "Question no longer exists.";
-      }
+        const questionData = questionSnap.data();
 
-      const questionData = questionSnap.data();
+        // 1. Check if another tutor already took it
+        if (questionData.status !== "open") {
+          throw "Too late! This question has already been accepted by someone else.";
+        }
 
-      // 1. THE CRITICAL CHECK: 
-      // If status is not 'open', someone else beat us to it.
-      if (questionData.status !== "open") {
-        throw "Too late! This question has already been accepted.";
-      }
+        // 2. Prepare the new Call Room
+        const newCallRef = doc(collection(db, "calls"));
 
-      // 2. Prepare the new Call Room document
-      const newCallRef = doc(collection(db, "calls"));
+        // 3. Atomically update both documents
+        transaction.set(newCallRef, {
+          createdAt: serverTimestamp(),
+          studentId: questionData.studentId,
+          studentName: questionData.studentName || "Anonymous",
+          tutorId: user.uid,
+          tutorName: user.displayName || "Tutor"
+        });
 
-      // 3. Perform the Writes
-      // Create the call record
-      transaction.set(newCallRef, {
-        createdAt: serverTimestamp(),
-        studentId: questionData.studentId,
-        studentName: questionData.studentName || "Anonymous",
-        tutorId: user.uid,
-        tutorName: user.displayName || "Tutor"
+        transaction.update(questionRef, {
+          status: "accepted",
+          acceptedBy: user.uid,
+          roomId: newCallRef.id,
+          acceptedAt: serverTimestamp(),
+        });
+
+        // 4. Success: Navigate to the session
+        navigate(`/tutor/session/${newCallRef.id}`);
       });
-
-      // Update the question record
-      transaction.update(questionRef, {
-        status: "accepted",
-        acceptedBy: user.uid,
-        roomId: newCallRef.id,
-        acceptedAt: serverTimestamp(),
-      });
-
-      // 4. Success! Navigate the winning tutor to the session
-      navigate(`/tutor/session/${newCallRef.id}`);
-    });
-  } catch (err) {
-    console.error("Transaction failed: ", err);
-    // You should show a toast or alert to the user here
-    alert(err); 
-  } finally {
-    setAccepting(false);
-  }
-};
+    } catch (err) {
+      console.error("Transaction failed: ", err);
+      alert(err); // User-friendly notification
+    } finally {
+      setAccepting(false);
+    }
+  };
 
   if (loading) return <p className="text-white p-10 text-center">Loading...</p>;
 
-  if (!question)
-    return <p className="text-red-400 p-10 text-center">Question not found</p>;
+  if (!question) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6">
+        <p className="text-red-400 mb-4">Question not found or deleted.</p>
+        <button onClick={() => navigate("/all-question-tutor")} className="text-white underline">
+          Go Back
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-black flex flex-col items-center p-6 space-y-6">
@@ -196,16 +179,19 @@ const acceptQuestion = async () => {
                 font-semibold rounded-xl
                 shadow-lg
                 hover:bg-green-600 hover:scale-105
-                transition-transform active:scale-95
-                overflow-hidden group cursor-pointer
+                transition-transform disabled:opacity-50 disabled:scale-100
+                active:scale-95 cursor-pointer
               "
             >
               {accepting ? "Starting..." : "Accept & Start Session"}
             </button>
           ) : (
-            <span className="inline-block px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 font-semibold">
-              Already Accepted
-            </span>
+            <div className="flex flex-col gap-2">
+               <span className="inline-block px-6 py-3 rounded-xl bg-emerald-500/20 text-emerald-400 font-semibold w-fit">
+                Already Accepted
+              </span>
+              <p className="text-zinc-500 text-xs">This session is no longer available.</p>
+            </div>
           )}
         </div>
       </motion.div>
