@@ -4,11 +4,11 @@ import {
   collection,
   doc,
   updateDoc,
+  setDoc, // Changed from addDoc to setDoc for safety
   addDoc,
   onSnapshot,
   serverTimestamp,
   getDocs,
-  getDoc,
   deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
@@ -35,10 +35,9 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   const [newMessage, setNewMessage] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("Idle");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [showConflictModal, setShowConflictModal] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
 
-  // ---------------- Logic Helpers ----------------
+  // ---------------- Cleanup ----------------
 
   const stopScreenShare = () => {
     if (screenStreamRef.current) {
@@ -71,9 +70,9 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
   const leaveSession = async () => {
     try {
-      if (!showConflictModal && isOnline) {
-        const callDocRef = doc(db, "calls", roomId);
-        await updateDoc(callDocRef, { ended: true });
+      if (isOnline) {
+        // Use setDoc with merge to prevent crashes if doc doesn't exist
+        await setDoc(doc(db, "calls", roomId), { ended: true }, { merge: true });
       }
     } catch (err) {
       console.error("Error leaving session:", err);
@@ -82,12 +81,10 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     navigate(isTutor ? "/tutor-home" : "/student-home");
   };
 
-  // ---------------- Reconnection Logic ----------------
+  // ---------------- Reconnection ----------------
 
   const handleReconnection = async () => {
-    console.log("Zoom-style reconnection started...");
-    
-    // We don't stop media, just reset the connection bridge
+    console.log("Connection lost. Reconnecting...");
     if (pc.current) {
       pc.current.close();
       pc.current = null;
@@ -96,74 +93,86 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     setConnectionStatus("Reconnecting");
     candidateQueue.current = [];
 
-    // Small delay to allow network to stabilize
     setTimeout(async () => {
+      // Re-trigger the start/join logic
       if (isTutor) await startCallAsTutor();
       else await joinCallAsStudent();
     }, 2000); 
   };
 
+  // ---------------- Media Setup ----------------
+
   const setupMedia = async () => {
     try {
-      // Reuse stream if exists, otherwise get it
-      const stream = localStreamRef.current || await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
-      
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-
-      pc.current = new RTCPeerConnection({
-        iceServers: [
-          { urls: "stun:stun.l.google.com:19302" },
-          { urls: "stun:stun1.l.google.com:19302" },
-        ],
-      });
-
-      pc.current.oniceconnectionstatechange = () => {
-        const state = pc.current.iceConnectionState;
-        setConnectionStatus(state);
-        if ((state === "failed" || state === "disconnected") && navigator.onLine) {
-          handleReconnection();
-        }
-      };
-
-      pc.current.ontrack = (event) => {
-        event.streams[0].getTracks().forEach((track) => {
-          remoteStream.current.addTrack(track);
+      // 1. Get User Media if we don't have it
+      if (!localStreamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
         });
-        if (remoteVideoRef.current)
-          remoteVideoRef.current.srcObject = remoteStream.current;
-      };
+        localStreamRef.current = stream;
+      }
+      
+      // 2. Set Local Video
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
 
-      pc.current.onicecandidate = (event) => {
-        if (!event.candidate) return;
-        const callDocRef = doc(db, "calls", roomId);
-        const candidatesCol = collection(
-          callDocRef,
-          isTutor ? "offerCandidates" : "answerCandidates",
-        );
-        addDoc(candidatesCol, event.candidate.toJSON());
-      };
+      // 3. Create Peer Connection
+      if (!pc.current) {
+        pc.current = new RTCPeerConnection({
+          iceServers: [
+            { urls: "stun:stun.l.google.com:19302" },
+            { urls: "stun:stun1.l.google.com:19302" },
+          ],
+        });
 
-      stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
-      return stream;
+        // Event Listeners
+        pc.current.oniceconnectionstatechange = () => {
+          const state = pc.current.iceConnectionState;
+          setConnectionStatus(state);
+          if ((state === "failed" || state === "disconnected") && navigator.onLine) {
+            handleReconnection();
+          }
+        };
+
+        pc.current.ontrack = (event) => {
+          event.streams[0].getTracks().forEach((track) => {
+            remoteStream.current.addTrack(track);
+          });
+          if (remoteVideoRef.current)
+            remoteVideoRef.current.srcObject = remoteStream.current;
+        };
+
+        pc.current.onicecandidate = (event) => {
+          if (!event.candidate) return;
+          const candidatesCol = collection(db, "calls", roomId, isTutor ? "offerCandidates" : "answerCandidates");
+          addDoc(candidatesCol, event.candidate.toJSON());
+        };
+
+        // Add Tracks to PC
+        localStreamRef.current.getTracks().forEach((track) => {
+          pc.current.addTrack(track, localStreamRef.current);
+        });
+      }
+
+      return localStreamRef.current;
     } catch (err) {
       console.error("Media Error:", err);
+      alert("Could not access camera/microphone. Please allow permissions.");
       return null;
     }
   };
 
   const addCandidate = async (candidateData) => {
     if (!pc.current) return;
-    if (!pc.current.remoteDescription) {
-      candidateQueue.current.push(candidateData);
-    } else {
-      try {
+    try {
+      if (pc.current.remoteDescription) {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidateData));
-      } catch (err) { console.error(err); }
-    }
+      } else {
+        candidateQueue.current.push(candidateData);
+      }
+    } catch (err) { console.error("Error adding candidate:", err); }
   };
 
   const processCandidateQueue = async () => {
@@ -176,83 +185,116 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     }
   };
 
-  // ---------------- Handshake Logic ----------------
+  // ---------------- Core Handshake Logic ----------------
 
   const startCallAsTutor = async () => {
-    const callDocRef = doc(db, "calls", roomId);
-    setCallActive(true);
-    
-    // Reset signaling data in Firestore to avoid conflicts
-    await updateDoc(callDocRef, { offer: null, answer: null });
-    
-    await setupMedia();
-    
-    // ICE RESTART is the key for professional reconnection
-    const offer = await pc.current.createOffer({ iceRestart: true });
-    await pc.current.setLocalDescription(offer);
-    
-    await updateDoc(callDocRef, { 
-      offer: { type: offer.type, sdp: offer.sdp },
-      ended: false 
-    });
+    try {
+      setCallActive(true); // Immediate UI update
+      const callDocRef = doc(db, "calls", roomId);
 
-    const unsub1 = onSnapshot(callDocRef, async (snap) => {
-      const data = snap.data();
-      if (!pc.current || !data?.answer || pc.current.signalingState === "stable") return;
-      await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-      const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
-      candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-      await processCandidateQueue();
-    });
+      // SAFEGUARD: Clear old data properly
+      await setDoc(callDocRef, { offer: null, answer: null }, { merge: true });
 
-    const unsub2 = onSnapshot(collection(callDocRef, "answerCandidates"), (snap) => {
-      snap.docChanges().forEach((change) => {
-        if (change.type === "added") addCandidate(change.doc.data());
+      // Clean old candidates
+      const q1 = await getDocs(collection(callDocRef, "offerCandidates"));
+      q1.forEach((d) => deleteDoc(d.ref));
+      const q2 = await getDocs(collection(callDocRef, "answerCandidates"));
+      q2.forEach((d) => deleteDoc(d.ref));
+
+      await setupMedia();
+
+      // Create Offer (with restart for safety)
+      const offer = await pc.current.createOffer({ iceRestart: true });
+      await pc.current.setLocalDescription(offer);
+
+      // Write Offer
+      await setDoc(callDocRef, { 
+        offer: { type: offer.type, sdp: offer.sdp },
+        ended: false 
+      }, { merge: true });
+
+      // Listen for Answer
+      const unsub1 = onSnapshot(callDocRef, async (snap) => {
+        const data = snap.data();
+        if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
+        
+        console.log("Tutor received answer");
+        await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+        
+        // Process queued candidates
+        const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
+        candidatesSnap.forEach((doc) => addCandidate(doc.data()));
+        await processCandidateQueue();
       });
-    });
 
-    unsubscribers.current.push(unsub1, unsub2);
+      // Listen for New Candidates
+      const unsub2 = onSnapshot(collection(callDocRef, "answerCandidates"), (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === "added") addCandidate(change.doc.data());
+        });
+      });
+
+      unsubscribers.current.push(unsub1, unsub2);
+    } catch (err) {
+      console.error("Start Call Failed:", err);
+      setCallActive(false); // Reset UI if failed
+    }
   };
 
   const joinCallAsStudent = async () => {
-    setCallActive(true);
-    const callDocRef = doc(db, "calls", roomId);
-    
-    const unsubOffer = onSnapshot(callDocRef, async (snap) => {
-      const data = snap.data();
-      if (!data?.offer || data?.ended) return;
+    try {
+      setCallActive(true); // Immediate UI update
+      const callDocRef = doc(db, "calls", roomId);
 
-      // Detect if Host has restarted the call
-      if (pc.current && pc.current.remoteDescription) {
-        console.log("Host initiated ICE restart, resyncing...");
-        pc.current.close();
-        pc.current = null;
-      }
+      const unsubOffer = onSnapshot(callDocRef, async (snap) => {
+        const data = snap.data();
+        if (!data?.offer || data?.ended) return;
 
-      await setupMedia();
-      
-      await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-      const answer = await pc.current.createAnswer();
-      await pc.current.setLocalDescription(answer);
-      
-      await updateDoc(callDocRef, {
-        answer: { type: answer.type, sdp: answer.sdp },
+        // CRITICAL FIX: Prevent loop. Only act if we don't have a connection 
+        // OR if the offer is newer (reconnection)
+        if (pc.current && pc.current.remoteDescription) {
+           // If remote desc exists, check if this is a NEW offer (signaling restart)
+           if (data.offer.sdp === pc.current.remoteDescription.sdp) return;
+           
+           console.log("New offer detected (Reconnection). Resetting PC...");
+           pc.current.close();
+           pc.current = null;
+        }
+
+        console.log("Student received offer");
+        await setupMedia();
+        
+        if (!pc.current) return;
+
+        await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.current.createAnswer();
+        await pc.current.setLocalDescription(answer);
+
+        await setDoc(callDocRef, {
+          answer: { type: answer.type, sdp: answer.sdp },
+        }, { merge: true });
+
+        // Load existing candidates
+        const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
+        candidatesSnap.forEach((doc) => addCandidate(doc.data()));
+        await processCandidateQueue();
       });
-      
-      const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
-      candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-      
+
+      // Listen for new candidates from Tutor
       const unsubCandidates = onSnapshot(collection(callDocRef, "offerCandidates"), (snap) => {
         snap.docChanges().forEach((change) => {
           if (change.type === "added") addCandidate(change.doc.data());
         });
       });
-      unsubscribers.current.push(unsubCandidates);
-      await processCandidateQueue();
-    });
 
-    unsubscribers.current.push(unsubOffer);
+      unsubscribers.current.push(unsubOffer, unsubCandidates);
+    } catch (err) {
+      console.error("Join Call Failed:", err);
+      setCallActive(false);
+    }
   };
+
+  // ---------------- Effects ----------------
 
   useEffect(() => {
     const handleOnline = () => {
@@ -285,7 +327,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     };
   }, [roomId, isTutor, navigate, callActive]);
 
-  // ---------------- UI Functions ----------------
+  // ---------------- UI Helpers ----------------
 
   const toggleMic = () => {
     if (!localStreamRef.current) return;
@@ -331,11 +373,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   };
 
   const isChatDisabled = !isOnline || connectionStatus !== "connected";
-  const chatPlaceholder = !isOnline 
-    ? "Offline..." 
-    : connectionStatus !== "connected" 
-      ? "Connecting..." 
-      : "Message...";
+  const chatPlaceholder = !isOnline ? "Offline..." : connectionStatus !== "connected" ? "Connecting..." : "Message...";
 
   return (
     <div className={`flex flex-col lg:flex-row w-full h-screen bg-black overflow-hidden ${headerHeight}`}>
