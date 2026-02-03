@@ -10,7 +10,6 @@ import {
   getDocs,
   getDoc,
   deleteDoc,
-  writeBatch,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -27,10 +26,6 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   const remoteStream = useRef(new MediaStream());
   const candidateQueue = useRef([]);
   const screenStreamRef = useRef(null);
-  const reconnectTimeoutRef = useRef(null);
-  const isReconnectingRef = useRef(false);
-  const hasReceivedAnswerRef = useRef(false);
-  const hasReceivedOfferRef = useRef(false);
 
   // ---------------- State ----------------
   const [micOn, setMicOn] = useState(true);
@@ -59,82 +54,18 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     setIsSharingScreen(false);
   };
 
-  const clearCandidates = async () => {
-    try {
-      const callDocRef = doc(db, "calls", roomId);
-      const batch = writeBatch(db);
-
-      // Clear offer candidates
-      const offerCandidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
-      offerCandidatesSnap.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-
-      // Clear answer candidates
-      const answerCandidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
-      answerCandidatesSnap.forEach((doc) => {
-        batch.delete(doc.ref);
-      });
-
-      await batch.commit();
-      console.log("Cleared all ICE candidates from Firestore");
-    } catch (err) {
-      console.error("Error clearing candidates:", err);
-    }
-  };
-
-  const cleanupPeerConnection = () => {
-    // Cleanup Firestore listeners
-    unsubscribers.current.forEach((unsub) => {
-      try {
-        unsub();
-      } catch (e) {
-        console.error("Error unsubscribing:", e);
-      }
-    });
-    unsubscribers.current = [];
-
-    // Close PeerConnection
-    if (pc.current) {
-      pc.current.onicecandidate = null;
-      pc.current.ontrack = null;
-      pc.current.oniceconnectionstatechange = null;
-      pc.current.close();
-      pc.current = null;
-    }
-
-    // Clear candidate queue
-    candidateQueue.current = [];
-
-    // Clear remote stream
-    if (remoteStream.current) {
-      remoteStream.current.getTracks().forEach(track => track.stop());
-      remoteStream.current = new MediaStream();
-    }
-
-    // Reset remote video
-    if (remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = null;
-    }
-
-    // Reset flags
-    hasReceivedAnswerRef.current = false;
-    hasReceivedOfferRef.current = false;
-  };
-
   const stopMediaStream = () => {
-    // 1. Stop screen share first
     stopScreenShare();
-
-    // 2. Stop local camera/mic
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
-
-    // 3. Cleanup peer connection
-    cleanupPeerConnection();
-
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
+    }
+    unsubscribers.current.forEach((unsub) => unsub());
+    unsubscribers.current = [];
     setCallActive(false);
   };
 
@@ -147,82 +78,42 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     } catch (err) {
       console.error("Error leaving session:", err);
     }
-    
-    // Clear reconnect timeout if exists
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    isReconnectingRef.current = false;
     stopMediaStream();
     navigate(isTutor ? "/tutor-home" : "/student-home");
   };
 
-  // ---------------- WebRTC Logic ----------------
+  // ---------------- Reconnection Logic ----------------
 
   const handleReconnection = async () => {
-    // Prevent multiple simultaneous reconnection attempts
-    if (isReconnectingRef.current) {
-      console.log("Reconnection already in progress...");
-      return;
+    console.log("Zoom-style reconnection started...");
+    
+    // We don't stop media, just reset the connection bridge
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
     }
-
-    isReconnectingRef.current = true;
-    console.log("Starting reconnection process...");
     
     setConnectionStatus("Reconnecting");
-    
-    // Clear any existing reconnect timeout
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
+    candidateQueue.current = [];
 
-    // Cleanup existing peer connection but keep local stream
-    cleanupPeerConnection();
-
-    // Clear old ICE candidates from Firestore
-    await clearCandidates();
-
-    // Wait a bit before reconnecting
-    reconnectTimeoutRef.current = setTimeout(async () => {
-      try {
-        if (isTutor) {
-          await startCallAsTutor();
-        } else {
-          await joinCallAsStudent();
-        }
-        console.log("Reconnection initiated");
-      } catch (error) {
-        console.error("Reconnection failed:", error);
-        setConnectionStatus("Failed");
-        isReconnectingRef.current = false;
-      }
-    }, 2000);
+    // Small delay to allow network to stabilize
+    setTimeout(async () => {
+      if (isTutor) await startCallAsTutor();
+      else await joinCallAsStudent();
+    }, 2000); 
   };
 
   const setupMedia = async () => {
     try {
-      // Reuse existing stream if available and valid
-      let stream = localStreamRef.current;
+      // Reuse stream if exists, otherwise get it
+      const stream = localStreamRef.current || await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
       
-      if (!stream || stream.getTracks().length === 0 || !stream.getTracks()[0].enabled) {
-        console.log("Requesting new media stream...");
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-        localStreamRef.current = stream;
-      } else {
-        console.log("Reusing existing media stream");
-      }
-      
-      if (localVideoRef.current && localVideoRef.current.srcObject !== stream) {
-        localVideoRef.current.srcObject = stream;
-      }
+      localStreamRef.current = stream;
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
-      // Create new peer connection
       pc.current = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -231,158 +122,92 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       });
 
       pc.current.oniceconnectionstatechange = () => {
-        const state = pc.current?.iceConnectionState;
-        console.log("ICE Connection State:", state);
+        const state = pc.current.iceConnectionState;
         setConnectionStatus(state);
-        
-        // Only trigger reconnection on failed, not on disconnected (disconnected might recover)
-        if (state === "failed" && navigator.onLine && !isReconnectingRef.current) {
-          console.log("Connection failed, attempting reconnection...");
+        if ((state === "failed" || state === "disconnected") && navigator.onLine) {
           handleReconnection();
-        }
-        
-        // If connected, mark reconnection as complete
-        if (state === "connected") {
-          isReconnectingRef.current = false;
         }
       };
 
       pc.current.ontrack = (event) => {
-        console.log("Received remote track");
         event.streams[0].getTracks().forEach((track) => {
-          // Remove existing track if it exists to prevent duplicates
-          const existingTrack = remoteStream.current.getTracks().find(t => t.kind === track.kind);
-          if (existingTrack) {
-            remoteStream.current.removeTrack(existingTrack);
-          }
           remoteStream.current.addTrack(track);
         });
-        if (remoteVideoRef.current) {
+        if (remoteVideoRef.current)
           remoteVideoRef.current.srcObject = remoteStream.current;
-        }
       };
 
       pc.current.onicecandidate = (event) => {
-        if (!event.candidate) {
-          console.log("All ICE candidates sent");
-          return;
-        }
-        console.log("Sending ICE candidate");
+        if (!event.candidate) return;
         const callDocRef = doc(db, "calls", roomId);
         const candidatesCol = collection(
           callDocRef,
           isTutor ? "offerCandidates" : "answerCandidates",
         );
-        addDoc(candidatesCol, event.candidate.toJSON()).catch(err => 
-          console.error("Error adding ICE candidate:", err)
-        );
+        addDoc(candidatesCol, event.candidate.toJSON());
       };
 
-      // Add tracks to peer connection
-      stream.getTracks().forEach((track) => {
-        console.log(`Adding ${track.kind} track to peer connection`);
-        pc.current.addTrack(track, stream);
-      });
-
+      stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
       return stream;
     } catch (err) {
       console.error("Media Error:", err);
-      setConnectionStatus("Failed");
-      isReconnectingRef.current = false;
       return null;
     }
   };
 
   const addCandidate = async (candidateData) => {
-    if (!pc.current) {
-      console.log("Cannot add candidate: no peer connection");
-      return;
-    }
+    if (!pc.current) return;
     if (!pc.current.remoteDescription) {
-      console.log("Queueing ICE candidate (no remote description yet)");
       candidateQueue.current.push(candidateData);
     } else {
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidateData));
-        console.log("Added ICE candidate");
-      } catch (err) { 
-        console.error("Error adding ICE candidate:", err);
-      }
+      } catch (err) { console.error(err); }
     }
   };
 
   const processCandidateQueue = async () => {
     if (!pc.current || !pc.current.remoteDescription) return;
-    console.log(`Processing ${candidateQueue.current.length} queued candidates`);
-    
     while (candidateQueue.current.length > 0) {
       const candidate = candidateQueue.current.shift();
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (err) { 
-        console.error("Error processing queued candidate:", err);
-      }
+      } catch (err) { console.error(err); }
     }
   };
 
+  // ---------------- Handshake Logic ----------------
+
   const startCallAsTutor = async () => {
-    console.log("Starting call as tutor...");
     const callDocRef = doc(db, "calls", roomId);
     setCallActive(true);
-    hasReceivedAnswerRef.current = false;
     
-    const stream = await setupMedia();
+    // Reset signaling data in Firestore to avoid conflicts
+    await updateDoc(callDocRef, { offer: null, answer: null });
     
-    if (!pc.current) {
-      console.error("Failed to setup peer connection");
-      isReconnectingRef.current = false;
-      return;
-    }
-
-    const offer = await pc.current.createOffer();
+    await setupMedia();
+    
+    // ICE RESTART is the key for professional reconnection
+    const offer = await pc.current.createOffer({ iceRestart: true });
     await pc.current.setLocalDescription(offer);
     
-    // Update offer in Firestore (this will trigger student to create new answer)
     await updateDoc(callDocRef, { 
       offer: { type: offer.type, sdp: offer.sdp },
-      answer: null, // Clear old answer to force new negotiation
       ended: false 
     });
-    
-    console.log("Offer sent to Firestore");
 
     const unsub1 = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
-      if (!pc.current || !data?.answer || hasReceivedAnswerRef.current) return;
-      
-      // Check if this is a new answer by comparing with current remote description
-      if (pc.current.remoteDescription) {
-        console.log("Already have remote description, skipping");
-        return;
-      }
-      
-      console.log("Received answer from student");
-      hasReceivedAnswerRef.current = true;
-      
-      try {
-        await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
-        console.log("Set remote description (answer)");
-        
-        // Process existing candidates
-        const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
-        candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-        await processCandidateQueue();
-      } catch (err) {
-        console.error("Error setting remote description:", err);
-        hasReceivedAnswerRef.current = false;
-      }
+      if (!pc.current || !data?.answer || pc.current.signalingState === "stable") return;
+      await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+      const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
+      candidatesSnap.forEach((doc) => addCandidate(doc.data()));
+      await processCandidateQueue();
     });
 
     const unsub2 = onSnapshot(collection(callDocRef, "answerCandidates"), (snap) => {
       snap.docChanges().forEach((change) => {
-        if (change.type === "added") {
-          addCandidate(change.doc.data());
-        }
+        if (change.type === "added") addCandidate(change.doc.data());
       });
     });
 
@@ -390,98 +215,51 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   };
 
   const joinCallAsStudent = async () => {
-    console.log("Joining call as student...");
     setCallActive(true);
-    hasReceivedOfferRef.current = false;
     const callDocRef = doc(db, "calls", roomId);
     
-    const unsubscribe = onSnapshot(callDocRef, async (snap) => {
+    const unsubOffer = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
-      
-      if (!data?.offer || data?.ended) {
-        console.log("No offer available or call ended");
-        return;
+      if (!data?.offer || data?.ended) return;
+
+      // Detect if Host has restarted the call
+      if (pc.current && pc.current.remoteDescription) {
+        console.log("Host initiated ICE restart, resyncing...");
+        pc.current.close();
+        pc.current = null;
       }
+
+      await setupMedia();
       
-      // Prevent processing the same offer multiple times
-      if (hasReceivedOfferRef.current) {
-        console.log("Already processing an offer");
-        return;
-      }
+      await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+      const answer = await pc.current.createAnswer();
+      await pc.current.setLocalDescription(answer);
       
-      hasReceivedOfferRef.current = true;
+      await updateDoc(callDocRef, {
+        answer: { type: answer.type, sdp: answer.sdp },
+      });
       
-      // Stop listening for offer once we start processing
-      unsubscribe();
+      const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
+      candidatesSnap.forEach((doc) => addCandidate(doc.data()));
       
-      console.log("Received offer from tutor");
-      const stream = await setupMedia();
-      
-      if (!pc.current) {
-        console.error("Failed to setup peer connection");
-        hasReceivedOfferRef.current = false;
-        isReconnectingRef.current = false;
-        return;
-      }
-      
-      try {
-        if (!pc.current.remoteDescription) {
-          await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-          console.log("Set remote description (offer)");
-        }
-        
-        const answer = await pc.current.createAnswer();
-        await pc.current.setLocalDescription(answer);
-        console.log("Created and set local description (answer)");
-        
-        await updateDoc(callDocRef, {
-          answer: { type: answer.type, sdp: answer.sdp },
+      const unsubCandidates = onSnapshot(collection(callDocRef, "offerCandidates"), (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === "added") addCandidate(change.doc.data());
         });
-        console.log("Answer sent to Firestore");
-        
-        // Process existing candidates
-        const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
-        candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-        
-        const unsubCandidates = onSnapshot(collection(callDocRef, "offerCandidates"), (snap) => {
-          snap.docChanges().forEach((change) => {
-            if (change.type === "added") {
-              addCandidate(change.doc.data());
-            }
-          });
-        });
-        
-        unsubscribers.current.push(unsubCandidates);
-        await processCandidateQueue();
-        
-        // Mark reconnection as potentially complete (will be confirmed when connection state changes)
-        setTimeout(() => {
-          if (pc.current?.iceConnectionState === "connected") {
-            isReconnectingRef.current = false;
-          }
-        }, 5000);
-      } catch (err) {
-        console.error("Error in student join flow:", err);
-        hasReceivedOfferRef.current = false;
-        isReconnectingRef.current = false;
-      }
+      });
+      unsubscribers.current.push(unsubCandidates);
+      await processCandidateQueue();
     });
+
+    unsubscribers.current.push(unsubOffer);
   };
 
   useEffect(() => {
     const handleOnline = () => {
-      console.log("Network online");
       setIsOnline(true);
-      if (callActive && !isReconnectingRef.current) {
-        handleReconnection();
-      }
+      if (callActive) handleReconnection();
     };
-    
-    const handleOffline = () => {
-      console.log("Network offline");
-      setIsOnline(false);
-      setConnectionStatus("Offline");
-    };
+    const handleOffline = () => setIsOnline(false);
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -495,7 +273,6 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
     const unsubCall = onSnapshot(doc(db, "calls", roomId), (snap) => {
       if (snap.data()?.ended) {
-        console.log("Call ended by other party");
         stopMediaStream();
         navigate(isTutor ? "/tutor-home" : "/student-home");
       }
@@ -504,17 +281,11 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      unsubChat();
-      unsubCall();
-      
-      // Clear reconnect timeout
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
-      
-      stopMediaStream();
+      stopMediaStream(); 
     };
   }, [roomId, isTutor, navigate, callActive]);
+
+  // ---------------- UI Functions ----------------
 
   const toggleMic = () => {
     if (!localStreamRef.current) return;
@@ -572,7 +343,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       {!isOnline && (
         <div className="fixed inset-0 z-[200] bg-red-600/20 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="bg-red-600 text-white px-6 py-3 rounded-full font-bold shadow-2xl animate-bounce">
-            📡 Offline. Reconnecting...
+            📡 Internet Lost. Attempting Reconnect...
           </div>
         </div>
       )}
@@ -582,7 +353,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         
         <div className="absolute top-4 left-6 z-20 flex gap-2">
           <div className="bg-black/60 backdrop-blur px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
-            <div className={`w-2 h-2 rounded-full ${connectionStatus === "connected" ? "bg-green-500" : connectionStatus === "Reconnecting" ? "bg-orange-500 animate-pulse" : "bg-yellow-500 animate-pulse"}`} />
+            <div className={`w-2 h-2 rounded-full ${connectionStatus === "connected" ? "bg-green-500" : "bg-yellow-500 animate-pulse"}`} />
             <span className="text-[10px] font-bold text-white uppercase tracking-widest">{connectionStatus}</span>
           </div>
         </div>
@@ -598,12 +369,12 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
             {!callActive && (
               <div className="absolute inset-0 bg-neutral-950/90 z-30 flex flex-col items-center justify-center text-center p-6">
                 <h2 className="text-2xl font-bold text-white mb-6">
-                  {isTutor ? "Ready to start the lesson?" : "Waiting for tutor..."}
+                  {isTutor ? "Ready to start?" : "Waiting for tutor..."}
                 </h2>
                 <button
                   disabled={!isOnline}
                   onClick={isTutor ? startCallAsTutor : joinCallAsStudent}
-                  className={`px-10 py-3 rounded-xl font-bold transition-all  ${isOnline ? "bg-indigo-600 text-white hover:bg-indigo-500 cursor-pointer" : "bg-neutral-700 text-neutral-500 cursor-not-allowed"}`}
+                  className={`px-10 py-3 rounded-xl font-bold transition-all  ${isOnline ? "bg-indigo-600 text-white cursor-pointer" : "bg-neutral-700 text-neutral-500 cursor-not-allowed"}`}
                 >
                   {isTutor ? "Start Session" : "Join Session"}
                 </button>
@@ -614,14 +385,14 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
         {/* CONTROLS */}
         <div className="h-20 sm:h-24 bg-neutral-900/80 backdrop-blur border-t border-white/10 flex items-center justify-center gap-2 sm:gap-6 px-4">
-          <button onClick={toggleMic} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800 hover:bg-neutral-700" : "bg-red-500 hover:bg-red-600"} text-white transition-colors cursor-pointer`}>
+          <button onClick={toggleMic} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}>
             {micOn ? "🎤" : "🔇"}
           </button>
-          <button onClick={toggleCam} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${camOn ? "bg-neutral-800 hover:bg-neutral-700" : "bg-red-500 hover:bg-red-600"} text-white transition-colors cursor-pointer`}>
+          <button onClick={toggleCam} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${camOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}>
             {camOn ? "📹" : "📷"}
           </button>
           <div className="w-px h-8 bg-white/10 mx-2" />
-          <button onClick={toggleScreenShare} className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${isSharingScreen ? "bg-blue-600 hover:bg-blue-500 text-white" : "bg-neutral-800 hover:bg-neutral-700 text-neutral-300"} cursor-pointer`}>
+          <button onClick={toggleScreenShare} className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest ${isSharingScreen ? "bg-blue-600 text-white cursor-pointer" : "bg-neutral-800 text-neutral-300 cursor-pointer"}`}>
             {isSharingScreen ? "Stop Sharing" : "Share Screen"}
           </button>
           <button onClick={leaveSession} className="px-4 sm:px-6 py-3 bg-red-600/10 border border-red-500/20 text-red-500 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all cursor-pointer">
@@ -664,17 +435,15 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
             <button 
               onClick={sendMessage} 
               disabled={isChatDisabled} 
-              className={`p-2.5 rounded-lg transition-colors ${!isChatDisabled ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer" : "bg-neutral-800 text-neutral-600 cursor-not-allowed"}`}
+              className={`p-2.5 rounded-lg transition-colors ${!isChatDisabled ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer" : "bg-neutral-800 text-neutral-600 cursor-pointer"}`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
               </svg>
             </button>
-          </div>
+            </div>
           {connectionStatus !== "connected" && isOnline && callActive && (
-            <p className="text-[9px] text-yellow-500 mt-2 text-center uppercase tracking-widest font-bold">
-              {connectionStatus === "Reconnecting" ? "Reconnecting to peer..." : "Establishing Peer Connection..."}
-            </p>
+            <p className="text-[9px] text-yellow-500 mt-2 text-center uppercase tracking-widest font-bold">Establishing Peer Connection...</p>
           )}
         </div>
       </aside>
