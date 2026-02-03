@@ -8,7 +8,7 @@ import {
   onSnapshot,
   serverTimestamp,
   getDocs,
-  deleteDoc,
+  getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -34,9 +34,10 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   const [newMessage, setNewMessage] = useState("");
   const [connectionStatus, setConnectionStatus] = useState("Idle");
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [showConflictModal, setShowConflictModal] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
 
-  // ---------------- Cleanup Helpers ----------------
+  // ---------------- Logic Helpers ----------------
 
   const stopScreenShare = () => {
     if (screenStreamRef.current) {
@@ -69,7 +70,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
   const leaveSession = async () => {
     try {
-      if (isOnline) {
+      if (!showConflictModal && isOnline) {
         const callDocRef = doc(db, "calls", roomId);
         await updateDoc(callDocRef, { ended: true });
       }
@@ -80,39 +81,38 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     navigate(isTutor ? "/tutor-home" : "/student-home");
   };
 
-  // ---------------- WebRTC Reconnection Logic ----------------
+  // ---------------- WebRTC Logic ----------------
 
   const handleReconnection = async () => {
-    console.warn("Connection lost. Resetting PeerConnection...");
-    
-    // Close existing connection
+    // 1. Clean up old connection completely
     if (pc.current) {
       pc.current.close();
       pc.current = null;
     }
     
+    // 2. Clear out any pending candidates from the previous session
+    candidateQueue.current = [];
+    setCallActive(false);
     setConnectionStatus("Reconnecting");
-    candidateQueue.current = []; // Clear old candidates
     
-    // Small delay to let network stabilize before restarting handshake
+    // 3. Small delay to allow Firestore state to stabilize before new handshake
     setTimeout(async () => {
       if (isTutor) await startCallAsTutor();
       else await joinCallAsStudent();
-    }, 2000);
+    }, 2000); 
   };
 
-  // ---------------- Core WebRTC Setup ----------------
-
   const setupMedia = async () => {
+    // Reuse local stream if it already exists to avoid permission prompts
     try {
-      // Reuse local stream if it exists, otherwise get new one
-      const stream = localStreamRef.current || await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      if (!localStreamRef.current) {
+        localStreamRef.current = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+      }
       
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
 
       pc.current = new RTCPeerConnection({
         iceServers: [
@@ -121,10 +121,10 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         ],
       });
 
-      // Monitor connection state
       pc.current.oniceconnectionstatechange = () => {
         const state = pc.current.iceConnectionState;
         setConnectionStatus(state);
+        // If the connection drops but the user still has internet, try to reconnect
         if ((state === "failed" || state === "disconnected") && navigator.onLine) {
           handleReconnection();
         }
@@ -148,8 +148,11 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         addDoc(candidatesCol, event.candidate.toJSON());
       };
 
-      stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
-      return stream;
+      localStreamRef.current.getTracks().forEach((track) => {
+        pc.current.addTrack(track, localStreamRef.current);
+      });
+
+      return localStreamRef.current;
     } catch (err) {
       console.error("Media Error:", err);
       return null;
@@ -163,7 +166,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     } else {
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidateData));
-      } catch (err) { console.error("Candidate Error:", err); }
+      } catch (err) { console.error(err); }
     }
   };
 
@@ -173,43 +176,43 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       const candidate = candidateQueue.current.shift();
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (err) { console.error("Queue Processing Error:", err); }
+      } catch (err) { console.error(err); }
     }
   };
-
-  // ---------------- Handshake Flows ----------------
 
   const startCallAsTutor = async () => {
     const callDocRef = doc(db, "calls", roomId);
     setCallActive(true);
     await setupMedia();
     
+    // We add { iceRestart: true } to the offer to signal a fresh network search
     const offer = await pc.current.createOffer({ iceRestart: true });
     await pc.current.setLocalDescription(offer);
     
+    // We clear 'answer' so the student listener knows a new handshake is starting
     await updateDoc(callDocRef, { 
       offer: { type: offer.type, sdp: offer.sdp },
-      answer: null, // Clear old answer to trigger student listener
+      answer: null, 
       ended: false 
     });
 
-    const unsubAnswer = onSnapshot(callDocRef, async (snap) => {
+    const unsub1 = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
-      if (!pc.current || !data?.answer || pc.current.signalingState === "stable") return;
-      
+      // If student has provided a new answer, apply it
+      if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
       await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
       const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
       candidatesSnap.forEach((doc) => addCandidate(doc.data()));
       await processCandidateQueue();
     });
 
-    const unsubCandidates = onSnapshot(collection(callDocRef, "answerCandidates"), (snap) => {
+    const unsub2 = onSnapshot(collection(callDocRef, "answerCandidates"), (snap) => {
       snap.docChanges().forEach((change) => {
         if (change.type === "added") addCandidate(change.doc.data());
       });
     });
 
-    unsubscribers.current.push(unsubAnswer, unsubCandidates);
+    unsubscribers.current.push(unsub1, unsub2);
   };
 
   const joinCallAsStudent = async () => {
@@ -219,27 +222,25 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     const unsubOffer = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
       if (!data?.offer || data?.ended) return;
-      
-      // If we already have a remote description and a new offer comes in, it's a reconnection
-      if (pc.current && pc.current.signalingState === "stable" && data.offer) {
-          console.log("New offer detected from Tutor, renegotiating...");
-          // We don't unsubscribe, we just restart the media and handshake
+
+      // Handle the case where the tutor restarts and sends a new offer
+      if (pc.current && pc.current.remoteDescription && data.offer) {
+          // If we already had a call but a new offer arrives, it's a reconnection
+          console.log("New offer received, resetting for reconnection");
       }
 
       await setupMedia();
       
-      // Only set description if we are in a state that allows it
-      if (pc.current.signalingState !== "stable") {
-          await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-          const answer = await pc.current.createAnswer();
-          await pc.current.setLocalDescription(answer);
-          await updateDoc(callDocRef, {
-            answer: { type: answer.type, sdp: answer.sdp },
-          });
-          
-          const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
-          candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-          await processCandidateQueue();
+      if (!pc.current.remoteDescription) {
+        await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
+        const answer = await pc.current.createAnswer();
+        await pc.current.setLocalDescription(answer);
+        await updateDoc(callDocRef, {
+          answer: { type: answer.type, sdp: answer.sdp },
+        });
+        const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
+        candidatesSnap.forEach((doc) => addCandidate(doc.data()));
+        await processCandidateQueue();
       }
     });
 
@@ -252,13 +253,13 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     unsubscribers.current.push(unsubOffer, unsubCandidates);
   };
 
-  // ---------------- Global Listeners ----------------
-
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // Automatically attempt to restart if we were already in a call
-      if (callActive) handleReconnection();
+      // If we were already in a session when we went offline, trigger reconnection
+      if (callActive) {
+        handleReconnection();
+      }
     };
     const handleOffline = () => setIsOnline(false);
 
@@ -279,15 +280,24 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       }
     });
 
+    // AUTO-JOIN ON REFRESH: If user refreshes while internet is back
+    const checkExistingSession = async () => {
+        const snap = await getDoc(doc(db, "calls", roomId));
+        if (snap.exists() && !snap.data().ended && isOnline && !callActive) {
+            if (isTutor) startCallAsTutor();
+            else joinCallAsStudent();
+        }
+    };
+    checkExistingSession();
+
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      stopMediaStream();
+      stopMediaStream(); 
     };
-  }, [roomId, isTutor, navigate, callActive]);
+  }, [roomId, isTutor, navigate, isOnline]); // Added isOnline as dependency
 
-  // ---------------- UI Handlers ----------------
-
+  // ... (toggleMic, toggleCam, toggleScreenShare, sendMessage functions stay the same)
   const toggleMic = () => {
     if (!localStreamRef.current) return;
     localStreamRef.current.getAudioTracks().forEach((track) => {
@@ -332,21 +342,25 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   };
 
   const isChatDisabled = !isOnline || connectionStatus !== "connected";
-  const chatPlaceholder = !isOnline ? "Offline..." : connectionStatus !== "connected" ? "Connecting..." : "Message...";
+  const chatPlaceholder = !isOnline 
+    ? "Offline..." 
+    : connectionStatus !== "connected" 
+      ? "Connecting..." 
+      : "Message...";
 
   return (
     <div className={`flex flex-col lg:flex-row w-full h-screen bg-black overflow-hidden ${headerHeight}`}>
       
-      {/* Offline Overlay */}
+      {/* Visual Reconnection Indicator */}
       {!isOnline && (
         <div className="fixed inset-0 z-[200] bg-red-600/20 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="bg-red-600 text-white px-6 py-3 rounded-full font-bold shadow-2xl animate-bounce">
-            📡 Offline. Reconnecting...
+            📡 Internet Lost. Reconnecting automatically...
           </div>
         </div>
       )}
 
-      {/* Video Area */}
+      {/* Rest of your JSX remains exactly as it was */}
       <section className="flex-[3] flex flex-col relative bg-neutral-950 min-h-0 border-b lg:border-b-0 lg:border-r border-white/10">
         
         <div className="absolute top-4 left-6 z-20 flex gap-2">
@@ -372,7 +386,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
                 <button
                   disabled={!isOnline}
                   onClick={isTutor ? startCallAsTutor : joinCallAsStudent}
-                  className={`px-10 py-3 rounded-xl font-bold transition-all  ${isOnline ? "bg-indigo-600 text-white cursor-pointer" : "bg-neutral-700 text-neutral-500 cursor-not-allowed"}`}
+                  className={`px-10 py-3 rounded-xl font-bold transition-all  ${isOnline ? "bg-indigo-600 text-white cursor-pointer" : "bg-neutral-700 text-neutral-500 cursor-pointer"}`}
                 >
                   {isTutor ? "Start Session" : "Join Session"}
                 </button>
@@ -382,14 +396,14 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         </div>
 
         <div className="h-20 sm:h-24 bg-neutral-900/80 backdrop-blur border-t border-white/10 flex items-center justify-center gap-2 sm:gap-6 px-4">
-          <button onClick={toggleMic} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800" : "bg-red-500"} text-white cursor-pointer`}>
+          <button onClick={toggleMic} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}>
             {micOn ? "🎤" : "🔇"}
           </button>
-          <button onClick={toggleCam} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${camOn ? "bg-neutral-800" : "bg-red-500"} text-white cursor-pointer`}>
+          <button onClick={toggleCam} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${camOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}>
             {camOn ? "📹" : "📷"}
           </button>
           <div className="w-px h-8 bg-white/10 mx-2" />
-          <button onClick={toggleScreenShare} className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest ${isSharingScreen ? "bg-blue-600 text-white" : "bg-neutral-800 text-neutral-300"} cursor-pointer`}>
+          <button onClick={toggleScreenShare} className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest ${isSharingScreen ? "bg-blue-600 text-white cursor-pointer" : "bg-neutral-800 text-neutral-300 cursor-pointer"}`}>
             {isSharingScreen ? "Stop Sharing" : "Share Screen"}
           </button>
           <button onClick={leaveSession} className="px-4 sm:px-6 py-3 bg-red-600/10 border border-red-500/20 text-red-500 rounded-xl font-bold text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all cursor-pointer">
@@ -398,8 +412,9 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         </div>
       </section>
 
-      {/* Chat Sidebar */}
+      {/* CHAT AREA (Truncated for brevity, stays same) */}
       <aside className="flex-1 lg:max-w-sm flex flex-col bg-neutral-900 h-[40vh] lg:h-full">
+        {/* ... (Keep your chat sidebar code exactly as is) */}
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-white font-black text-[10px] uppercase tracking-widest">Classroom Chat</h2>
         </div>
@@ -429,12 +444,16 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
               placeholder={chatPlaceholder}
               className="flex-1 bg-transparent text-white px-3 py-2 text-sm outline-none placeholder:text-neutral-500"
             />
-            <button onClick={sendMessage} disabled={isChatDisabled} className={`p-2.5 rounded-lg transition-colors ${!isChatDisabled ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer" : "bg-neutral-800 text-neutral-600"}`}>
+            <button 
+              onClick={sendMessage} 
+              disabled={isChatDisabled} 
+              className={`p-2.5 rounded-lg transition-colors ${!isChatDisabled ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer" : "bg-neutral-800 text-neutral-600 cursor-pointer"}`}
+            >
               <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
                 <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
               </svg>
             </button>
-          </div>
+            </div>
         </div>
       </aside>
 
