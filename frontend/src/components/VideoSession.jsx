@@ -25,6 +25,8 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   const remoteStream = useRef(new MediaStream());
   const candidateQueue = useRef([]);
   const screenStreamRef = useRef(null);
+  const reconnectTimeoutRef = useRef(null);
+  const isReconnectingRef = useRef(false);
 
   // ---------------- State ----------------
   const [micOn, setMicOn] = useState(true);
@@ -53,6 +55,27 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     setIsSharingScreen(false);
   };
 
+  const cleanupPeerConnection = () => {
+    // Cleanup Firestore listeners
+    unsubscribers.current.forEach((unsub) => unsub());
+    unsubscribers.current = [];
+
+    // Close PeerConnection
+    if (pc.current) {
+      pc.current.close();
+      pc.current = null;
+    }
+
+    // Clear candidate queue
+    candidateQueue.current = [];
+
+    // Clear remote stream
+    if (remoteStream.current) {
+      remoteStream.current.getTracks().forEach(track => track.stop());
+      remoteStream.current = new MediaStream();
+    }
+  };
+
   const stopMediaStream = () => {
     // 1. Stop screen share first
     stopScreenShare();
@@ -63,15 +86,9 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       localStreamRef.current = null;
     }
 
-    // 3. Close PeerConnection
-    if (pc.current) {
-      pc.current.close();
-      pc.current = null;
-    }
+    // 3. Cleanup peer connection
+    cleanupPeerConnection();
 
-    // 4. Cleanup listeners
-    unsubscribers.current.forEach((unsub) => unsub());
-    unsubscribers.current = [];
     setCallActive(false);
   };
 
@@ -84,37 +101,76 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     } catch (err) {
       console.error("Error leaving session:", err);
     }
+    
+    // Clear reconnect timeout if exists
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
     stopMediaStream();
     navigate(isTutor ? "/tutor-home" : "/student-home");
   };
 
   // ---------------- WebRTC Logic ----------------
 
-  const handleReconnection = () => {
-    if (pc.current) {
-      pc.current.close();
-      pc.current = null;
+  const handleReconnection = async () => {
+    // Prevent multiple simultaneous reconnection attempts
+    if (isReconnectingRef.current) {
+      console.log("Reconnection already in progress...");
+      return;
     }
-    setCallActive(false);
+
+    isReconnectingRef.current = true;
+    console.log("Starting reconnection process...");
+    
     setConnectionStatus("Reconnecting");
     
-    setTimeout(() => {
-      if (isTutor) startCallAsTutor();
-      else joinCallAsStudent();
-    }, 2000); 
+    // Clear any existing reconnect timeout
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    // Cleanup existing peer connection but keep local stream
+    cleanupPeerConnection();
+
+    // Wait a bit before reconnecting
+    reconnectTimeoutRef.current = setTimeout(async () => {
+      try {
+        if (isTutor) {
+          await startCallAsTutor();
+        } else {
+          await joinCallAsStudent();
+        }
+        console.log("Reconnection successful");
+      } catch (error) {
+        console.error("Reconnection failed:", error);
+        setConnectionStatus("Failed");
+      } finally {
+        isReconnectingRef.current = false;
+      }
+    }, 2000);
   };
 
   const setupMedia = async () => {
-    if (localStreamRef.current && pc.current) return localStreamRef.current;
     try {
-      const stream = localStreamRef.current || await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      // Reuse existing stream if available
+      let stream = localStreamRef.current;
       
-      localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      if (!stream || stream.getTracks().length === 0) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: true,
+          audio: true,
+        });
+        localStreamRef.current = stream;
+      }
+      
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = stream;
+      }
 
+      // Create new peer connection
       pc.current = new RTCPeerConnection({
         iceServers: [
           { urls: "stun:stun.l.google.com:19302" },
@@ -123,19 +179,24 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       });
 
       pc.current.oniceconnectionstatechange = () => {
-        const state = pc.current.iceConnectionState;
+        const state = pc.current?.iceConnectionState;
+        console.log("ICE Connection State:", state);
         setConnectionStatus(state);
-        if ((state === "failed" || state === "disconnected") && navigator.onLine) {
+        
+        if ((state === "failed" || state === "disconnected") && navigator.onLine && !isReconnectingRef.current) {
+          console.log("Connection lost, attempting reconnection...");
           handleReconnection();
         }
       };
 
       pc.current.ontrack = (event) => {
+        console.log("Received remote track");
         event.streams[0].getTracks().forEach((track) => {
           remoteStream.current.addTrack(track);
         });
-        if (remoteVideoRef.current)
+        if (remoteVideoRef.current) {
           remoteVideoRef.current.srcObject = remoteStream.current;
+        }
       };
 
       pc.current.onicecandidate = (event) => {
@@ -145,13 +206,20 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
           callDocRef,
           isTutor ? "offerCandidates" : "answerCandidates",
         );
-        addDoc(candidatesCol, event.candidate.toJSON());
+        addDoc(candidatesCol, event.candidate.toJSON()).catch(err => 
+          console.error("Error adding ICE candidate:", err)
+        );
       };
 
-      stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
+      // Add tracks to peer connection
+      stream.getTracks().forEach((track) => {
+        pc.current.addTrack(track, stream);
+      });
+
       return stream;
     } catch (err) {
       console.error("Media Error:", err);
+      setConnectionStatus("Failed");
       return null;
     }
   };
@@ -163,24 +231,38 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     } else {
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidateData));
-      } catch (err) { console.error(err); }
+      } catch (err) { 
+        console.error("Error adding ICE candidate:", err);
+      }
     }
   };
 
   const processCandidateQueue = async () => {
     if (!pc.current || !pc.current.remoteDescription) return;
+    console.log(`Processing ${candidateQueue.current.length} queued candidates`);
+    
     while (candidateQueue.current.length > 0) {
       const candidate = candidateQueue.current.shift();
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
-      } catch (err) { console.error(err); }
+      } catch (err) { 
+        console.error("Error processing queued candidate:", err);
+      }
     }
   };
 
   const startCallAsTutor = async () => {
+    console.log("Starting call as tutor...");
     const callDocRef = doc(db, "calls", roomId);
     setCallActive(true);
+    
     await setupMedia();
+    
+    if (!pc.current) {
+      console.error("Failed to setup peer connection");
+      return;
+    }
+
     const offer = await pc.current.createOffer();
     await pc.current.setLocalDescription(offer);
     await updateDoc(callDocRef, { 
@@ -191,7 +273,10 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     const unsub1 = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
       if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
+      
+      console.log("Received answer from student");
       await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
+      
       const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
       candidatesSnap.forEach((doc) => addCandidate(doc.data()));
       await processCandidateQueue();
@@ -199,7 +284,9 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
     const unsub2 = onSnapshot(collection(callDocRef, "answerCandidates"), (snap) => {
       snap.docChanges().forEach((change) => {
-        if (change.type === "added") addCandidate(change.doc.data());
+        if (change.type === "added") {
+          addCandidate(change.doc.data());
+        }
       });
     });
 
@@ -207,29 +294,46 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   };
 
   const joinCallAsStudent = async () => {
+    console.log("Joining call as student...");
     setCallActive(true);
     const callDocRef = doc(db, "calls", roomId);
+    
     const unsubscribe = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
       if (!data?.offer || data?.ended) return;
+      
+      // Stop listening for offer once we have it
       unsubscribe();
+      
+      console.log("Received offer from tutor");
       await setupMedia();
+      
+      if (!pc.current) {
+        console.error("Failed to setup peer connection");
+        return;
+      }
+      
       if (!pc.current.remoteDescription) {
         await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
       }
+      
       const answer = await pc.current.createAnswer();
       await pc.current.setLocalDescription(answer);
       await updateDoc(callDocRef, {
         answer: { type: answer.type, sdp: answer.sdp },
       });
+      
       const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
       candidatesSnap.forEach((doc) => addCandidate(doc.data()));
       
       const unsubCandidates = onSnapshot(collection(callDocRef, "offerCandidates"), (snap) => {
         snap.docChanges().forEach((change) => {
-          if (change.type === "added") addCandidate(change.doc.data());
+          if (change.type === "added") {
+            addCandidate(change.doc.data());
+          }
         });
       });
+      
       unsubscribers.current.push(unsubCandidates);
       await processCandidateQueue();
     });
@@ -237,10 +341,18 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
   useEffect(() => {
     const handleOnline = () => {
+      console.log("Network online");
       setIsOnline(true);
-      if (callActive) handleReconnection();
+      if (callActive && !isReconnectingRef.current) {
+        handleReconnection();
+      }
     };
-    const handleOffline = () => setIsOnline(false);
+    
+    const handleOffline = () => {
+      console.log("Network offline");
+      setIsOnline(false);
+      setConnectionStatus("Offline");
+    };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
@@ -254,6 +366,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
     const unsubCall = onSnapshot(doc(db, "calls", roomId), (snap) => {
       if (snap.data()?.ended) {
+        console.log("Call ended by other party");
         stopMediaStream();
         navigate(isTutor ? "/tutor-home" : "/student-home");
       }
@@ -262,9 +375,17 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      stopMediaStream(); // This now handles screen share stop too
+      unsubChat();
+      unsubCall();
+      
+      // Clear reconnect timeout
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      
+      stopMediaStream();
     };
-  }, [roomId, isTutor, navigate]);
+  }, [roomId, isTutor, navigate, callActive]);
 
   const toggleMic = () => {
     if (!localStreamRef.current) return;
@@ -420,7 +541,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
                 <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576 6.636 10.07Zm6.787-8.201L1.591 6.602l4.339 2.76 7.494-7.493Z" />
               </svg>
             </button>
-            </div>
+          </div>
           {connectionStatus !== "connected" && isOnline && callActive && (
             <p className="text-[9px] text-yellow-500 mt-2 text-center uppercase tracking-widest font-bold">Establishing Peer Connection...</p>
           )}
