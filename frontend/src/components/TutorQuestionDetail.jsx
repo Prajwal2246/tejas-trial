@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Clock, ArrowLeft } from "lucide-react";
+import {runTransaction,onSnapshot } from "firebase/firestore";
+
 import {
   doc,
   getDoc,
@@ -12,6 +14,26 @@ import {
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
+
+
+useEffect(() => {
+  const ref = doc(db, "questions", id);
+  
+  // Use onSnapshot instead of getDoc for real-time updates
+  const unsubscribe = onSnapshot(ref, (snap) => {
+    if (snap.exists()) {
+      setQuestion({ id: snap.id, ...snap.data() });
+    } else {
+      setQuestion(null);
+    }
+    setLoading(false);
+  }, (error) => {
+    console.error("Error listening to question:", error);
+    setLoading(false);
+  });
+
+  return () => unsubscribe(); // Cleanup listener on unmount
+}, [id]);
 
 /* 🔹 Firestore-safe timeAgo */
 const timeAgo = (timestamp) => {
@@ -51,36 +73,61 @@ export default function TutorQuestionDetail() {
   }, [id]);
 
   /* 🔹 Accept & Start Session */
-  const acceptQuestion = async () => {
-    if (!user || !question) return;
-    setAccepting(true);
 
-    try {
-      // 1️⃣ Create Firestore call room with student info
-      const callDocRef = doc(collection(db, "calls"));
-      await setDoc(callDocRef, {
+const acceptQuestion = async () => {
+  if (!user || !question) return;
+  setAccepting(true);
+
+  try {
+    // We use runTransaction to ensure atomicity
+    await runTransaction(db, async (transaction) => {
+      const questionRef = doc(db, "questions", id);
+      const questionSnap = await transaction.get(questionRef);
+
+      if (!questionSnap.exists()) {
+        throw "Question no longer exists.";
+      }
+
+      const questionData = questionSnap.data();
+
+      // 1. THE CRITICAL CHECK: 
+      // If status is not 'open', someone else beat us to it.
+      if (questionData.status !== "open") {
+        throw "Too late! This question has already been accepted.";
+      }
+
+      // 2. Prepare the new Call Room document
+      const newCallRef = doc(collection(db, "calls"));
+
+      // 3. Perform the Writes
+      // Create the call record
+      transaction.set(newCallRef, {
         createdAt: serverTimestamp(),
-        studentId: question.studentId,
-        studentName: question.studentName || "Anonymous",
+        studentId: questionData.studentId,
+        studentName: questionData.studentName || "Anonymous",
+        tutorId: user.uid,
+        tutorName: user.displayName || "Tutor"
       });
 
-      // 2️⃣ Update question
-      const questionRef = doc(db, "questions", id);
-      await updateDoc(questionRef, {
+      // Update the question record
+      transaction.update(questionRef, {
         status: "accepted",
         acceptedBy: user.uid,
-        roomId: callDocRef.id,
+        roomId: newCallRef.id,
         acceptedAt: serverTimestamp(),
       });
 
-      // 3️⃣ Navigate to video session
-      navigate(`/tutor/session/${callDocRef.id}`);
-    } catch (err) {
-      console.error("Error starting session:", err);
-    } finally {
-      setAccepting(false);
-    }
-  };
+      // 4. Success! Navigate the winning tutor to the session
+      navigate(`/tutor/session/${newCallRef.id}`);
+    });
+  } catch (err) {
+    console.error("Transaction failed: ", err);
+    // You should show a toast or alert to the user here
+    alert(err); 
+  } finally {
+    setAccepting(false);
+  }
+};
 
   if (loading) return <p className="text-white p-10 text-center">Loading...</p>;
 
