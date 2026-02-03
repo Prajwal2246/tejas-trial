@@ -54,15 +54,22 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   };
 
   const stopMediaStream = () => {
+    // 1. Stop screen share first
     stopScreenShare();
+
+    // 2. Stop local camera/mic
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => track.stop());
       localStreamRef.current = null;
     }
+
+    // 3. Close PeerConnection
     if (pc.current) {
       pc.current.close();
       pc.current = null;
     }
+
+    // 4. Cleanup listeners
     unsubscribers.current.forEach((unsub) => unsub());
     unsubscribers.current = [];
     setCallActive(false);
@@ -83,36 +90,30 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
 
   // ---------------- WebRTC Logic ----------------
 
-  const handleReconnection = async () => {
-    // 1. Clean up old connection completely
+  const handleReconnection = () => {
     if (pc.current) {
       pc.current.close();
       pc.current = null;
     }
-    
-    // 2. Clear out any pending candidates from the previous session
-    candidateQueue.current = [];
     setCallActive(false);
     setConnectionStatus("Reconnecting");
     
-    // 3. Small delay to allow Firestore state to stabilize before new handshake
-    setTimeout(async () => {
-      if (isTutor) await startCallAsTutor();
-      else await joinCallAsStudent();
+    setTimeout(() => {
+      if (isTutor) startCallAsTutor();
+      else joinCallAsStudent();
     }, 2000); 
   };
 
   const setupMedia = async () => {
-    // Reuse local stream if it already exists to avoid permission prompts
+    if (localStreamRef.current && pc.current) return localStreamRef.current;
     try {
-      if (!localStreamRef.current) {
-        localStreamRef.current = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true,
-        });
-      }
+      const stream = localStreamRef.current || await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
       
-      if (localVideoRef.current) localVideoRef.current.srcObject = localStreamRef.current;
+      localStreamRef.current = stream;
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
 
       pc.current = new RTCPeerConnection({
         iceServers: [
@@ -124,7 +125,6 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       pc.current.oniceconnectionstatechange = () => {
         const state = pc.current.iceConnectionState;
         setConnectionStatus(state);
-        // If the connection drops but the user still has internet, try to reconnect
         if ((state === "failed" || state === "disconnected") && navigator.onLine) {
           handleReconnection();
         }
@@ -148,11 +148,8 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         addDoc(candidatesCol, event.candidate.toJSON());
       };
 
-      localStreamRef.current.getTracks().forEach((track) => {
-        pc.current.addTrack(track, localStreamRef.current);
-      });
-
-      return localStreamRef.current;
+      stream.getTracks().forEach((track) => pc.current.addTrack(track, stream));
+      return stream;
     } catch (err) {
       console.error("Media Error:", err);
       return null;
@@ -184,21 +181,15 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
     const callDocRef = doc(db, "calls", roomId);
     setCallActive(true);
     await setupMedia();
-    
-    // We add { iceRestart: true } to the offer to signal a fresh network search
-    const offer = await pc.current.createOffer({ iceRestart: true });
+    const offer = await pc.current.createOffer();
     await pc.current.setLocalDescription(offer);
-    
-    // We clear 'answer' so the student listener knows a new handshake is starting
     await updateDoc(callDocRef, { 
       offer: { type: offer.type, sdp: offer.sdp },
-      answer: null, 
       ended: false 
     });
 
     const unsub1 = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
-      // If student has provided a new answer, apply it
       if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
       await pc.current.setRemoteDescription(new RTCSessionDescription(data.answer));
       const candidatesSnap = await getDocs(collection(callDocRef, "answerCandidates"));
@@ -218,48 +209,36 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   const joinCallAsStudent = async () => {
     setCallActive(true);
     const callDocRef = doc(db, "calls", roomId);
-    
-    const unsubOffer = onSnapshot(callDocRef, async (snap) => {
+    const unsubscribe = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
       if (!data?.offer || data?.ended) return;
-
-      // Handle the case where the tutor restarts and sends a new offer
-      if (pc.current && pc.current.remoteDescription && data.offer) {
-          // If we already had a call but a new offer arrives, it's a reconnection
-          console.log("New offer received, resetting for reconnection");
-      }
-
+      unsubscribe();
       await setupMedia();
-      
       if (!pc.current.remoteDescription) {
         await pc.current.setRemoteDescription(new RTCSessionDescription(data.offer));
-        const answer = await pc.current.createAnswer();
-        await pc.current.setLocalDescription(answer);
-        await updateDoc(callDocRef, {
-          answer: { type: answer.type, sdp: answer.sdp },
-        });
-        const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
-        candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-        await processCandidateQueue();
       }
-    });
-
-    const unsubCandidates = onSnapshot(collection(callDocRef, "offerCandidates"), (snap) => {
-      snap.docChanges().forEach((change) => {
-        if (change.type === "added") addCandidate(change.doc.data());
+      const answer = await pc.current.createAnswer();
+      await pc.current.setLocalDescription(answer);
+      await updateDoc(callDocRef, {
+        answer: { type: answer.type, sdp: answer.sdp },
       });
+      const candidatesSnap = await getDocs(collection(callDocRef, "offerCandidates"));
+      candidatesSnap.forEach((doc) => addCandidate(doc.data()));
+      
+      const unsubCandidates = onSnapshot(collection(callDocRef, "offerCandidates"), (snap) => {
+        snap.docChanges().forEach((change) => {
+          if (change.type === "added") addCandidate(change.doc.data());
+        });
+      });
+      unsubscribers.current.push(unsubCandidates);
+      await processCandidateQueue();
     });
-
-    unsubscribers.current.push(unsubOffer, unsubCandidates);
   };
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      // If we were already in a session when we went offline, trigger reconnection
-      if (callActive) {
-        handleReconnection();
-      }
+      if (callActive) handleReconnection();
     };
     const handleOffline = () => setIsOnline(false);
 
@@ -280,24 +259,13 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
       }
     });
 
-    // AUTO-JOIN ON REFRESH: If user refreshes while internet is back
-    const checkExistingSession = async () => {
-        const snap = await getDoc(doc(db, "calls", roomId));
-        if (snap.exists() && !snap.data().ended && isOnline && !callActive) {
-            if (isTutor) startCallAsTutor();
-            else joinCallAsStudent();
-        }
-    };
-    checkExistingSession();
-
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
-      stopMediaStream(); 
+      stopMediaStream(); // This now handles screen share stop too
     };
-  }, [roomId, isTutor, navigate, isOnline]); // Added isOnline as dependency
+  }, [roomId, isTutor, navigate]);
 
-  // ... (toggleMic, toggleCam, toggleScreenShare, sendMessage functions stay the same)
   const toggleMic = () => {
     if (!localStreamRef.current) return;
     localStreamRef.current.getAudioTracks().forEach((track) => {
@@ -351,16 +319,15 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
   return (
     <div className={`flex flex-col lg:flex-row w-full h-screen bg-black overflow-hidden ${headerHeight}`}>
       
-      {/* Visual Reconnection Indicator */}
       {!isOnline && (
         <div className="fixed inset-0 z-[200] bg-red-600/20 backdrop-blur-sm flex items-center justify-center pointer-events-none">
           <div className="bg-red-600 text-white px-6 py-3 rounded-full font-bold shadow-2xl animate-bounce">
-            📡 Internet Lost. Reconnecting automatically...
+            📡 Offline. Reconnecting...
           </div>
         </div>
       )}
 
-      {/* Rest of your JSX remains exactly as it was */}
+      {/* 1. VIDEO AREA */}
       <section className="flex-[3] flex flex-col relative bg-neutral-950 min-h-0 border-b lg:border-b-0 lg:border-r border-white/10">
         
         <div className="absolute top-4 left-6 z-20 flex gap-2">
@@ -395,6 +362,7 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
           </div>
         </div>
 
+        {/* CONTROLS */}
         <div className="h-20 sm:h-24 bg-neutral-900/80 backdrop-blur border-t border-white/10 flex items-center justify-center gap-2 sm:gap-6 px-4">
           <button onClick={toggleMic} className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}>
             {micOn ? "🎤" : "🔇"}
@@ -412,9 +380,8 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
         </div>
       </section>
 
-      {/* CHAT AREA (Truncated for brevity, stays same) */}
+      {/* 2. CHAT SIDEBAR */}
       <aside className="flex-1 lg:max-w-sm flex flex-col bg-neutral-900 h-[40vh] lg:h-full">
-        {/* ... (Keep your chat sidebar code exactly as is) */}
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
           <h2 className="text-white font-black text-[10px] uppercase tracking-widest">Classroom Chat</h2>
         </div>
@@ -454,6 +421,9 @@ export default function VideoSession({ headerHeight = "pt-16", isTutor = true })
               </svg>
             </button>
             </div>
+          {connectionStatus !== "connected" && isOnline && callActive && (
+            <p className="text-[9px] text-yellow-500 mt-2 text-center uppercase tracking-widest font-bold">Establishing Peer Connection...</p>
+          )}
         </div>
       </aside>
 
