@@ -386,10 +386,18 @@ export default function VideoSession({
   useEffect(() => {
     // 1. Refresh/Close logic (Same as you have)
     const handleBeforeUnload = (e) => {
-      if (!callActive || manualLeaveRef.current) return;
-      e.preventDefault();
-      e.returnValue = "";
-    };
+      e.preventDefault()
+  console.log('beforeunload triggered', { callActive, manual: manualLeaveRef.current });
+  
+  if (!callActive || manualLeaveRef.current) {
+    console.log('Early return - no popup');
+    return;
+  }
+  
+  console.log('Setting returnValue - popup should show');
+  e.preventDefault();
+  e.returnValue = ""; // Modern browsers show generic message
+};
 
     // 2. Back Button logic
     const handlePopState = (e) => {
@@ -411,10 +419,9 @@ export default function VideoSession({
     };
 
     // Push an initial dummy state so there's always something to "go back" from
-    if (callActive && !hasPushedStateRef.current) {
-    window.history.pushState(null, "", window.location.href);
-    hasPushedStateRef.current = true;
-  }
+    if (callActive) {
+      window.history.pushState(null, "", window.location.href);
+    }
 
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("popstate", handlePopState);
