@@ -32,6 +32,7 @@ export default function VideoSession({
   const isReconnectingRef = useRef(false);
   const callEndedRef = useRef(false);
   const manualLeaveRef = useRef(false);
+  const hasPushedStateRef = useRef(false);
 
   // ---------------- State ----------------
   const [micOn, setMicOn] = useState(true);
@@ -383,40 +384,46 @@ export default function VideoSession({
   };
 
   useEffect(() => {
+    // 1. Refresh/Close logic (Same as you have)
     const handleBeforeUnload = (e) => {
       if (!callActive || manualLeaveRef.current) return;
-
       e.preventDefault();
-      e.returnValue = ""; // This will trigger the default confirmation dialog
+      e.returnValue = "";
     };
 
+    // 2. Back Button logic
     const handlePopState = (e) => {
-      if (!manualLeaveRef.current) {
-        const shouldLeave = window.confirm(
-          "Are you sure you want to leave the session?",
-        );
-        if (shouldLeave) {
-          stopMediaStream(); // Perform the cleanup
-          navigate(isTutor ? "/tutor-home" : "/student-home");
-        } else {
-          // If canceled, remove the popstate event listener
-          window.removeEventListener("popstate", handlePopState);
-          // Push the state back to prevent the back navigation
-          window.history.pushState(null, "", window.location.href);
-        }
+      if (manualLeaveRef.current) return;
+
+      const shouldLeave = window.confirm(
+        "Are you sure you want to leave the session?",
+      );
+
+      if (shouldLeave) {
+        manualLeaveRef.current = true; // Set this so cleanup knows we're leaving
+        stopMediaStream();
+        navigate(isTutor ? "/tutor-home" : "/student-home", { replace: true });
+      } else {
+        // CRITICAL: The user already moved back.
+        // We must push the current URL back onto the stack to "undo" the back button.
+        window.history.pushState(null, "", window.location.href);
       }
     };
 
-    // Add event listeners
+    // Push an initial dummy state so there's always something to "go back" from
+    if (callActive && !hasPushedStateRef.current) {
+    window.history.pushState(null, "", window.location.href);
+    hasPushedStateRef.current = true;
+  }
+
     window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("popstate", handlePopState);
 
-    // Cleanup event listeners
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [callActive, navigate]);
+  }, [callActive, navigate, isTutor]);
 
   useEffect(() => {
     const handleOnline = () => {
