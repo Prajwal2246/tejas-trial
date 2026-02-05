@@ -44,6 +44,8 @@ export default function VideoSession({
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
+const [sessionStarted, setSessionStarted] = useState(false);
+
 
   // ---------------- Logic Helpers ----------------
 
@@ -249,6 +251,7 @@ export default function VideoSession({
 
   const startCallAsTutor = async () => {
     const callDocRef = doc(db, "calls", roomId);
+    setSessionStarted(true);
     setCallActive(true);
     await setupMedia();
     const offer = await pc.current.createOffer();
@@ -386,18 +389,21 @@ export default function VideoSession({
   useEffect(() => {
     // 1. Refresh/Close logic (Same as you have)
     const handleBeforeUnload = (e) => {
-      e.preventDefault()
-  console.log('beforeunload triggered', { callActive, manual: manualLeaveRef.current });
-  
-  if (!callActive || manualLeaveRef.current) {
-    console.log('Early return - no popup');
-    return;
-  }
-  
-  console.log('Setting returnValue - popup should show');
-  e.preventDefault();
-  e.returnValue = ""; // Modern browsers show generic message
-};
+      e.preventDefault();
+      console.log("beforeunload triggered", {
+        callActive,
+        manual: manualLeaveRef.current,
+      });
+
+      if (!callActive || manualLeaveRef.current) {
+        console.log("Early return - no popup");
+        return;
+      }
+
+      console.log("Setting returnValue - popup should show");
+      e.preventDefault();
+      e.returnValue = ""; // Modern browsers show generic message
+    };
 
     // 2. Back Button logic
     const handlePopState = (e) => {
@@ -606,7 +612,7 @@ export default function VideoSession({
               )}
             </div>
 
-            {!callActive &&
+            {!sessionStarted &&
               connectionStatus !== "connected" &&
               connectionStatus !== "checking" &&
               connectionStatus != "disconnected" && (
