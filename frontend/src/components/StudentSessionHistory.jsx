@@ -1,148 +1,249 @@
 import React, { useEffect, useState } from "react";
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot 
+import {
+	collection,
+	query,
+	where,
+	orderBy,
+	onSnapshot,
+	doc,
+	getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { 
-  Calendar, 
-  CheckCircle2, 
-  ChevronRight, 
-  MessageSquare,
-  BookOpen,
-  User
-} from "lucide-react";
-import { motion } from "framer-motion";
+import { Calendar, CheckCircle2, ChevronRight, BookOpen, PlayCircle } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
-/* Helper to format the completion date */
 const formatDate = (timestamp) => {
-  if (!timestamp) return "Processing...";
-  return timestamp.toDate().toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
+	if (!timestamp) return "Processing...";
+	return timestamp.toDate().toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	});
 };
 
-function StudentSessionHistory() {
-  const { user } = useAuth();
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function StudentSessionHistory() {
+	const { user } = useAuth();
+	const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!user?.uid) return;
+	const [activeSessions, setActiveSessions] = useState([]);
+	const [history, setHistory] = useState([]);
+	const [loading, setLoading] = useState(true);
 
-    // QUERY LOGIC: Filter by 'studentId' and 'status'
-    // NOTE: If you sort by 'completedAt', you will need to create a new Composite Index
-    // specifically for this query (status + studentId + completedAt).
-    const q = query(
-      collection(db, "questions"),
-      where("status", "==", "completed"),
-      where("studentId", "==", user.uid), 
-      orderBy("completedAt", "desc")
-    );
+	// 🔹 SESSION MODAL STATE (per session)
+	const [sessionModal, setSessionModal] = useState({});
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setHistory(docs);
-      setLoading(false);
-    }, (error) => {
-      console.error("Student History Fetch Error:", error);
-      setLoading(false);
-    });
+	// ---------------------- FUNCTIONS ----------------------
+	const openModal = (sessionId, title, message) => {
+		setSessionModal((prev) => ({
+			...prev,
+			[sessionId]: { open: true, title, message },
+		}));
 
-    return () => unsubscribe();
-  }, [user]);
+		// auto-close after 3s
+		setTimeout(() => {
+			setSessionModal((prev) => ({
+				...prev,
+				[sessionId]: { open: false, title: "", message: "" },
+			}));
+		}, 3000);
+	};
 
-  return (
-    <div className="min-h-screen bg-[#050505] px-6 py-24 font-['Plus_Jakarta_Sans'] text-white">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Header Section */}
-        <div className="mb-16">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="bg-sky-500/10 p-2 rounded-lg">
-              <BookOpen className="text-sky-500 w-5 h-5" />
-            </div>
-            <span className="text-sky-500 text-xs font-bold uppercase tracking-[0.2em]">Learning Archive</span>
-          </div>
-          <h1 className="text-4xl md:text-6xl font-['Space_Grotesk'] font-bold tracking-tighter">
-            My <span className="text-sky-500">Learning</span> History
-          </h1>
-          <p className="text-zinc-500 mt-4 text-lg max-w-2xl font-['Plus_Jakarta_Sans']">
-            Review all your completed doubts and expert solutions in one place.
-          </p>
-        </div>
+	const handleJoin = async (id) => {
+		const callRef = doc(db, "calls", id);
+		const callSnap = await getDoc(callRef);
 
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500"></div>
-            <p className="text-zinc-500 font-medium animate-pulse">Retrieving your sessions...</p>
-          </div>
-        ) : history.length === 0 ? (
-          <div className="rounded-[3rem] border-2 border-dashed border-white/5 bg-zinc-900/20 p-20 text-center">
-            <CheckCircle2 className="mx-auto w-12 h-12 text-zinc-800 mb-4" />
-            <p className="text-zinc-500 font-medium font-['Space_Grotesk']">You haven't completed any sessions yet.</p>
-          </div>
-        ) : (
-          <div className="grid gap-4">
-            {history.map((session, index) => (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-                key={session.id}
-                className="group relative flex flex-col md:flex-row items-center justify-between p-8 bg-zinc-900/30 border border-white/5 rounded-[2.5rem] hover:bg-zinc-900/60 hover:border-sky-500/30 transition-all duration-500"
-              >
-                <div className="flex items-center gap-8 w-full md:w-auto">
-                  {/* Status Icon */}
-                  <div className="h-16 w-16 bg-white/5 rounded-[1.5rem] flex items-center justify-center text-zinc-500 group-hover:bg-sky-500 group-hover:text-white transition-all duration-500 shadow-xl">
-                    <CheckCircle2 size={32} />
-                  </div>
-                  
-                  {/* Session Details */}
-                  <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white font-['Space_Grotesk'] group-hover:text-sky-400 transition-colors">
-                      {session.title}
-                    </h3>
-                    <div className="flex flex-wrap gap-5 text-[10px] font-bold uppercase tracking-widest text-zinc-500">
-                      <span className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full">
-                        <Calendar size={12} className="text-sky-500" />
-                        {formatDate(session.completedAt)}
-                      </span>
-                      <span className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full">
-                        <User size={12} className="text-amber-500" />
-                        Tutor: {session.tutorName || "Expert"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+		
+		if (!callSnap.exists() || callSnap.data()?.tutorOnline !== true) {
+			openModal(
+				id,
+				"Tutor Not Available",
+				"The tutor hasn’t joined the session yet. Please wait and try again.",
+			);
+			return;
+		}
 
-                {/* Right Side Info */}
-                <div className="mt-8 md:mt-0 flex items-center gap-10 w-full md:w-auto justify-between md:justify-end">
-                  <div className="text-right hidden sm:block">
-                    <p className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mb-1">Status</p>
-                    <p className="text-emerald-400 font-bold font-['Space_Grotesk'] uppercase text-xs">Successfully Resolved</p>
-                  </div>
-                  
-                  <button className="h-14 w-14 rounded-full bg-white/5 border border-white/5 flex items-center justify-center text-white hover:bg-sky-500 hover:border-sky-400 transition-all duration-300 group-hover:rotate-45 shadow-lg">
-                    <ChevronRight size={24} />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+		if (callSnap.data()?.ended === true) {
+			openModal(
+				id,
+				"Session Completed",
+				"This session has already been completed.",
+			);
+			return;
+		}
+
+		navigate(`/student/session/${id}`);
+	};
+
+	// ---------------------- FIREBASE DATA ----------------------
+	/* ACTIVE SESSIONS */
+	useEffect(() => {
+		if (!user?.uid) return;
+
+		const q = query(
+			collection(db, "questions"),
+			where("status", "==", "accepted"),
+			where("studentId", "==", user.uid),
+			orderBy("createdAt", "desc"),
+		);
+
+		return onSnapshot(q, (snap) => {
+			setActiveSessions(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+		});
+	}, [user]);
+
+	/* COMPLETED SESSIONS */
+	useEffect(() => {
+		if (!user?.uid) return;
+
+		const q = query(
+			collection(db, "questions"),
+			where("status", "==", "completed"),
+			where("studentId", "==", user.uid),
+			orderBy("completedAt", "desc"),
+		);
+
+		return onSnapshot(q, (snap) => {
+			setHistory(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+			setLoading(false);
+		});
+	}, [user]);
+
+	// ---------------------- RENDER ----------------------
+	return (
+		<div className="min-h-screen bg-[#050505] px-6 py-24 text-white relative">
+			<div className="max-w-6xl mx-auto">
+				{/* HEADER */}
+				<div className="mb-20">
+					<BookOpen className="text-sky-500 mb-4" />
+					<h1 className="text-4xl md:text-6xl font-bold">
+						My <span className="text-sky-500">Sessions</span>
+					</h1>
+				</div>
+
+				{/* ACTIVE SESSIONS */}
+				<div className="mb-24 relative">
+					<h2 className="text-2xl font-bold mb-6">
+						Active Sessions ({activeSessions.length})
+					</h2>
+
+					{activeSessions.length === 0 ?
+						<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
+							No active sessions
+						</div>
+					:	<div className="grid gap-4 relative">
+							{activeSessions.map((s, i) => (
+								<div key={s.id} className="relative">
+									<motion.div
+										initial={{ opacity: 0, y: 20 }}
+										animate={{ opacity: 1, y: 0 }}
+										transition={{ delay: i * 0.05 }}
+										className="flex justify-between items-center p-8 bg-zinc-900/40 border border-white/5 rounded-2xl"
+									>
+										<div className="flex items-center gap-6">
+											<PlayCircle
+												className="text-sky-400"
+												size={32}
+											/>
+											<div>
+												<h3 className="font-bold">{s.title}</h3>
+												<p className="text-sm text-zinc-400">
+													Tutor: {s.tutorName || "Expert"}
+												</p>
+											</div>
+										</div>
+
+										<button
+											onClick={() => handleJoin(s.id)}
+											className="px-6 py-3 rounded-full bg-sky-500 text-black font-bold hover:bg-sky-400 transition"
+										>
+											Join Session
+										</button>
+									</motion.div>
+
+									{/* INLINE MODAL FOR THIS CARD */}
+									<AnimatePresence>
+										{sessionModal[s.id]?.open && (
+											<motion.div
+												initial={{ opacity: 0, y: -20 }}
+												animate={{ opacity: 1, y: 0 }}
+												exit={{ opacity: 0, y: -20 }}
+												transition={{
+													duration: 0.25,
+													ease: "easeOut",
+												}}
+												className="absolute -top-20 left-0 right-0 z-10 px-4"
+											>
+												<div className="flex items-start gap-4 rounded-xl border border-sky-500/30 bg-sky-500/10 px-6 py-4 backdrop-blur relative">
+													<div className="mt-1 text-sky-400">
+														<PlayCircle size={22} />
+													</div>
+													<div className="flex-1">
+														<h3 className="font-semibold text-sky-300">
+															{sessionModal[s.id].title}
+														</h3>
+														<p className="text-sm text-sky-200/80 mt-1">
+															{sessionModal[s.id].message}
+														</p>
+													</div>
+													{/* DISMISS BUTTON */}
+													<button
+														onClick={() =>
+															setSessionModal((prev) => ({
+																...prev,
+																[s.id]: {
+																	open: false,
+																	title: "",
+																	message: "",
+																},
+															}))
+														}
+														className="absolute top-2 right-2 text-sky-300 hover:text-white transition text-sm"
+													>
+														Dismiss
+													</button>
+												</div>
+											</motion.div>
+										)}
+									</AnimatePresence>
+								</div>
+							))}
+						</div>
+					}
+				</div>
+
+				{/* COMPLETED SESSIONS */}
+				<h2 className="text-2xl font-bold mb-6">Completed Sessions</h2>
+				{loading ?
+					<p className="text-zinc-500">Loading...</p>
+				: history.length === 0 ?
+					<p className="text-zinc-500">No completed sessions yet</p>
+				:	<div className="grid gap-4">
+						{history.map((s, i) => (
+							<motion.div
+								key={s.id}
+								initial={{ opacity: 0, y: 20 }}
+								animate={{ opacity: 1, y: 0 }}
+								transition={{ delay: i * 0.05 }}
+								className="flex justify-between items-center p-8 bg-zinc-900/30 border border-white/5 rounded-2xl"
+							>
+								<div className="flex items-center gap-4">
+									<CheckCircle2 className="text-emerald-500" />
+									<div>
+										<h3 className="font-bold">{s.title}</h3>
+										<p className="text-xs text-zinc-500">
+											<Calendar size={12} className="inline mr-1" />
+											{formatDate(s.completedAt)}
+										</p>
+									</div>
+								</div>
+								<ChevronRight className="text-zinc-500" />
+							</motion.div>
+						))}
+					</div>
+				}
+			</div>
+		</div>
+	);
 }
-
-export default StudentSessionHistory;

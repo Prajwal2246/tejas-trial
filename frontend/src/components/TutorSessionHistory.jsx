@@ -1,137 +1,191 @@
 import React, { useEffect, useState } from "react";
-import { 
-  collection, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot 
+import {
+	collection,
+	query,
+	where,
+	orderBy,
+	onSnapshot,
+	doc,
+	updateDoc,
+	serverTimestamp,
+	getDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 import { useAuth } from "../context/AuthContext";
-import { 
-  Calendar, 
-  Clock, 
-  CheckCircle2, 
-  ChevronRight, 
-  MessageSquare 
-} from "lucide-react";
+import { Calendar, CheckCircle2, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { useNavigate } from "react-router-dom";
 
-/* Helper to format the completion date */
+/* Date formatter */
 const formatDate = (timestamp) => {
-  if (!timestamp) return "N/A";
-  return timestamp.toDate().toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric'
-  });
+	if (!timestamp) return "N/A";
+	return timestamp.toDate().toLocaleDateString("en-US", {
+		month: "short",
+		day: "numeric",
+		year: "numeric",
+	});
 };
 
-function TutorSessionHistory() {
-  const { user } = useAuth();
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
+export default function TutorSessionHistory() {
+	const { user } = useAuth();
+	const navigate = useNavigate();
+	const [active, setActive] = useState([]);
+	const [completed, setCompleted] = useState([]);
+	const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    if (!user?.uid) return;
+	/* ACTIVE */
+	useEffect(() => {
+		if (!user?.uid) return;
 
-    const q = query(
-      collection(db, "questions"),
-      where("status", "==", "completed"),
-      where("acceptedBy", "==", user.uid),
-      orderBy("completedAt", "desc")
-    );
+		const q = query(
+			collection(db, "questions"),
+			where("status", "==", "accepted"),
+			where("acceptedBy", "==", user.uid),
+			orderBy("createdAt", "desc"),
+		);
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      }));
-      setHistory(docs);
-      setLoading(false);
-    }, (error) => {
-      console.error("History Query Error:", error);
-      setLoading(false);
-    });
+		return onSnapshot(q, (snap) => {
+			setActive(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+		});
+	}, [user]);
 
-    return () => unsubscribe();
-  }, [user]);
+	/* COMPLETED */
+	useEffect(() => {
+		if (!user?.uid) return;
 
-  
-  return (
-    <div className="min-h-screen bg-black px-6 py-24 font-['Plus_Jakarta_Sans']">
-      <div className="max-w-6xl mx-auto">
-        
-        {/* Header Section */}
-        <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-['Space_Grotesk'] font-bold text-white tracking-tighter">
-            Session <span className="text-emerald-500">History</span>
-          </h1>
-          <p className="text-zinc-500 mt-2">
-            Review your completed sessions and student feedback.
-          </p>
-        </div>
+		const q = query(
+			collection(db, "questions"),
+			where("status", "==", "completed"),
+			where("acceptedBy", "==", user.uid),
+			orderBy("completedAt", "desc"),
+		);
 
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-emerald-500"></div>
-          </div>
-        ) : history.length === 0 ? (
-          <div className="rounded-[2rem] border-2 border-dashed border-white/5 bg-zinc-900/20 p-20 text-center">
-            <p className="text-zinc-500">No completed sessions found yet.</p>
-          </div>
-        ) : (
-          <div className="grid gap-6">
-            {history.map((session, index) => (
-              <motion.div
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.1 }}
-                key={session.id}
-                className="group relative flex flex-col md:flex-row items-center justify-between p-8 bg-zinc-900/50 border border-white/10 rounded-[2rem] hover:border-emerald-500/30 transition-all duration-300"
-              >
-                <div className="flex items-center gap-6 w-full md:w-auto">
-                  {/* Status Icon */}
-                  <div className="h-14 w-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-500 shadow-lg group-hover:bg-emerald-500 group-hover:text-white transition-all duration-300">
-                    <CheckCircle2 size={28} />
-                  </div>
-                  
-                  {/* Session Details */}
-                  <div className="space-y-1">
-                    <h3 className="text-lg font-bold text-white font-['Space_Grotesk']">
-                      {session.title}
-                    </h3>
-                    <div className="flex flex-wrap gap-4 text-xs font-bold uppercase tracking-widest text-zinc-500">
-                      <span className="flex items-center gap-1.5">
-                        <Calendar size={14} className="text-emerald-500" />
-                        {formatDate(session.completedAt)}
-                      </span>
-                      <span className="flex items-center gap-1.5">
-                        <MessageSquare size={14} className="text-sky-500" />
-                        {session.subject || "General"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
+		return onSnapshot(q, (snap) => {
+			setCompleted(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+			setLoading(false);
+		});
+	}, [user]);
 
-                {/* Right Side: Metadata & View */}
-                <div className="mt-6 md:mt-0 flex items-center gap-6 w-full md:w-auto justify-between md:justify-end border-t md:border-t-0 border-white/5 pt-6 md:pt-0">
-                  <div className="text-right">
-                    <p className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Duration</p>
-                    <p className="text-white font-bold">{session.duration || "15 min"}</p>
-                  </div>
-                  
-                  <button className="h-12 w-12 rounded-full bg-white/5 flex items-center justify-center text-white hover:bg-white hover:text-black transition-all">
-                    <ChevronRight size={20} />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+	const handleCompleted = async (id) => {
+		// Mark question completed
+		await updateDoc(doc(db, "questions", id), {
+			status: "completed",
+			completedAt: serverTimestamp(),
+		});
+
+		// 🔥 Final hard end of the call (NO MORE REJOINS)
+		await updateDoc(doc(db, "calls", id), {
+			ended: true,
+			endedAt: serverTimestamp(),
+			tutorOnline: false,
+		});
+	};
+
+	const handleJoin = async (id) => {
+		const callSnap = await getDoc(doc(db, "calls", id));
+
+		if (!callSnap.exists()) {
+			// Tutor can create the call
+			navigate(`/tutor/session/${id}`);
+			return;
+		}
+
+		// 🔥 ONLY block if session was COMPLETED
+		if (callSnap.data()?.ended === true) {
+			alert("This session has already been completed");
+			return;
+		}
+
+		// Otherwise allow unlimited rejoin
+		navigate(`/tutor/session/${id}`);
+	};
+
+	return (
+		<div className="min-h-screen bg-black px-6 py-24">
+			<div className="max-w-6xl mx-auto">
+				{/* ACTIVE */}
+				<div className="mb-20">
+					<h2 className="text-2xl font-bold text-white mb-6">
+						Active Sessions ({active.length})
+					</h2>
+
+					{active.length === 0 ?
+						<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
+							No active sessions
+						</div>
+					:	<div className="grid gap-6">
+							{active.map((s) => (
+								<div
+									key={s.id}
+									className="flex justify-between items-center p-8 bg-zinc-900/60 border border-white/10 rounded-2xl"
+								>
+									<div>
+										<h3 className="text-lg font-bold text-white">
+											{s.title}
+										</h3>
+										<p className="text-sm text-zinc-400 mt-1">
+											{s.description}
+										</p>
+									</div>
+
+									<div className="flex gap-4">
+										<button
+											onClick={() => handleJoin(s.id)}
+											className="px-5 py-2 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500 hover:text-white transition"
+										>
+											Join
+										</button>
+
+										<button
+											onClick={() => handleCompleted(s.id)}
+											className="px-5 py-2 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition"
+										>
+											✓ Complete
+										</button>
+									</div>
+								</div>
+							))}
+						</div>
+					}
+				</div>
+
+				{/* COMPLETED */}
+				<h2 className="text-2xl font-bold text-white mb-6">Completed Sessions</h2>
+
+				{loading ?
+					<p className="text-zinc-500">Loading...</p>
+				: completed.length === 0 ?
+					<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
+						No completed sessions
+					</div>
+				:	<div className="grid gap-6">
+						{completed.map((s, i) => (
+							<motion.div
+								key={s.id}
+								initial={{ opacity: 0, x: -20 }}
+								animate={{ opacity: 1, x: 0 }}
+								transition={{ delay: i * 0.05 }}
+								className="flex justify-between items-center p-8 bg-zinc-900/50 border border-white/10 rounded-2xl"
+							>
+								<div className="flex gap-4 items-center">
+									<CheckCircle2 className="text-emerald-500" />
+									<div>
+										<h3 className="text-white font-bold">
+											{s.title}
+										</h3>
+										<p className="text-xs text-zinc-500">
+											<Calendar size={12} className="inline mr-1" />
+											{formatDate(s.completedAt)}
+										</p>
+									</div>
+								</div>
+
+								<ChevronRight className="text-zinc-500" />
+							</motion.div>
+						))}
+					</div>
+				}
+			</div>
+		</div>
+	);
 }
-
-export default TutorSessionHistory;

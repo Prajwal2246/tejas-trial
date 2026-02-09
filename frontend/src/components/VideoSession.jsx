@@ -9,6 +9,9 @@ import {
   serverTimestamp,
   getDocs,
   getDoc,
+  setDoc,
+  deleteField,
+  deleteDoc,
 } from "firebase/firestore";
 import { db } from "../firebase";
 
@@ -32,7 +35,7 @@ export default function VideoSession({
   const isReconnectingRef = useRef(false);
   const callEndedRef = useRef(false);
   const manualLeaveRef = useRef(false);
-  const hasPushedStateRef = useRef(false);
+  const callActiveRef = useRef(false);
 
   // ---------------- State ----------------
   const [micOn, setMicOn] = useState(true);
@@ -44,13 +47,32 @@ export default function VideoSession({
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [showConflictModal, setShowConflictModal] = useState(false);
   const [isSharingScreen, setIsSharingScreen] = useState(false);
-const [sessionStarted, setSessionStarted] = useState(false);
-
+  const [sessionStarted, setSessionStarted] = useState(false);
 
   // ---------------- Logic Helpers ----------------
 
-  const stopScreenShare = () => {
-    // Stop screen stream
+  const resetCallSignaling = async () => {
+    const callDocRef = doc(db, "calls", roomId);
+
+    // Clear SDP
+    await updateDoc(callDocRef, {
+      offer: deleteField(),
+      answer: deleteField(),
+    });
+
+    // Clear ICE candidates
+    const offerCandidates = await getDocs(
+      collection(callDocRef, "offerCandidates"),
+    );
+    offerCandidates.forEach((c) => deleteDoc(c.ref));
+
+    const answerCandidates = await getDocs(
+      collection(callDocRef, "answerCandidates"),
+    );
+    answerCandidates.forEach((c) => deleteDoc(c.ref));
+  };
+
+  const stopScreenShare = async () => {
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => track.stop());
       screenStreamRef.current = null;
@@ -58,23 +80,64 @@ const [sessionStarted, setSessionStarted] = useState(false);
 
     const cameraTrack = localStreamRef.current?.getVideoTracks()[0];
 
-    // Restore camera track to PeerConnection
     if (pc.current && cameraTrack) {
       const sender = pc.current
         .getSenders()
         .find((s) => s.track?.kind === "video");
 
       if (sender) {
-        sender.replaceTrack(cameraTrack);
+        try {
+          await sender.replaceTrack(cameraTrack);
+        } catch (err) {
+          console.error("Error restoring camera track:", err);
+        }
       }
     }
 
-    // Always restore local camera preview
     if (localVideoRef.current && localStreamRef.current) {
       localVideoRef.current.srcObject = localStreamRef.current;
     }
 
     setIsSharingScreen(false);
+  };
+
+  const toggleScreenShare = async () => {
+    if (!isSharingScreen) {
+      try {
+        const stream = await navigator.mediaDevices.getDisplayMedia({
+          video: true,
+        });
+        screenStreamRef.current = stream;
+        const screenTrack = stream.getVideoTracks()[0];
+
+        // Replace the video track being sent to the peer
+        if (pc.current) {
+          const sender = pc.current
+            .getSenders()
+            .find((s) => s.track && s.track.kind === "video");
+
+          if (sender) {
+            await sender.replaceTrack(screenTrack);
+          }
+        }
+
+        // Update local preview
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = stream;
+        }
+
+        // Handle case where user clicks browser's built-in "Stop sharing" button
+        screenTrack.onended = () => {
+          stopScreenShare();
+        };
+
+        setIsSharingScreen(true);
+      } catch (e) {
+        console.error("Screen share error:", e);
+      }
+    } else {
+      await stopScreenShare();
+    }
   };
 
   const cleanupPeerConnection = () => {
@@ -103,15 +166,27 @@ const [sessionStarted, setSessionStarted] = useState(false);
 
   const leaveSession = async () => {
     manualLeaveRef.current = true;
+    callActiveRef.current = false;
+
+    const callDocRef = doc(db, "calls", roomId);
+
     try {
-      if (!showConflictModal && isOnline) {
-        const callDocRef = doc(db, "calls", roomId);
-        await updateDoc(callDocRef, { ended: true });
-      }
+      await updateDoc(callDocRef, {
+        lastLeftAt: serverTimestamp(),
+        lastLeftBy: isTutor ? "Tutor" : "Student",
+      });
+      await updateDoc(callDocRef, {
+        tutorOnline: false,
+      });
     } catch (err) {
-      console.error("Error leaving session:", err);
+      console.error("Error ending call:", err);
     }
+
     stopMediaStream();
+
+    setSessionStarted(false);
+    setCallActive(false);
+
     navigate(isTutor ? "/tutor-home" : "/student-home");
   };
 
@@ -142,9 +217,6 @@ const [sessionStarted, setSessionStarted] = useState(false);
     setConnectionStatus("Reconnecting");
 
     cleanupPeerConnection();
-    candidateQueue.current = [];
-
-    if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
 
     reconnectTimeoutRef.current = setTimeout(async () => {
       try {
@@ -183,17 +255,14 @@ const [sessionStarted, setSessionStarted] = useState(false);
 
       pc.current.oniceconnectionstatechange = () => {
         const state = pc.current?.iceConnectionState;
-        if (!state) return;
-        setConnectionStatus(state);
+        setConnectionStatus(state || "Disconnected");
 
         if (
           (state === "failed" || state === "disconnected") &&
           navigator.onLine &&
           callActive
         ) {
-          if (!isReconnectingRef.current) {
-            handleReconnection();
-          }
+          handleReconnection();
         }
       };
 
@@ -232,7 +301,7 @@ const [sessionStarted, setSessionStarted] = useState(false);
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidateData));
       } catch (err) {
-        console.error(err);
+        console.error("Ice Candidate Error:", err);
       }
     }
   };
@@ -244,46 +313,83 @@ const [sessionStarted, setSessionStarted] = useState(false);
       try {
         await pc.current.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (err) {
-        console.error(err);
+        console.error("Queue process error:", err);
       }
     }
   };
 
   const startCallAsTutor = async () => {
     const callDocRef = doc(db, "calls", roomId);
+
+    const snap = await getDoc(callDocRef);
+    if (snap.exists() && snap.data()?.ended === true) {
+      alert("This session has already been completed");
+      return;
+    }
+
+    await setDoc(
+      callDocRef,
+      {
+        createdAt: serverTimestamp(),
+        ended: false,
+      },
+      { merge: true },
+    );
+    await updateDoc(callDocRef, {
+      tutorOnline: true,
+    });
+
+    await resetCallSignaling();
+
     setSessionStarted(true);
     setCallActive(true);
-    await setupMedia();
+    callActiveRef.current = true;
+
+    const stream = await setupMedia();
+    if (!stream || !pc.current) {
+      console.error("Failed to setup media");
+      return;
+    }
+
     const offer = await pc.current.createOffer();
     await pc.current.setLocalDescription(offer);
+
     await updateDoc(callDocRef, {
-      offer: { type: offer.type, sdp: offer.sdp },
+      offer: {
+        type: offer.type,
+        sdp: offer.sdp,
+      },
       ended: false,
     });
 
-    const unsub1 = onSnapshot(callDocRef, async (snap) => {
+    const unsubAnswer = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
       if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
-      await pc.current.setRemoteDescription(
-        new RTCSessionDescription(data.answer),
-      );
-      const candidatesSnap = await getDocs(
-        collection(callDocRef, "answerCandidates"),
-      );
-      candidatesSnap.forEach((doc) => addCandidate(doc.data()));
-      await processCandidateQueue();
+
+      try {
+        await pc.current.setRemoteDescription(
+          new RTCSessionDescription(data.answer),
+        );
+
+        // Process any queued ICE candidates
+        await processCandidateQueue();
+      } catch (err) {
+        console.error("Error setting remote answer:", err);
+      }
     });
 
-    const unsub2 = onSnapshot(
+    const unsubCandidates = onSnapshot(
       collection(callDocRef, "answerCandidates"),
       (snap) => {
         snap.docChanges().forEach((change) => {
-          if (change.type === "added") addCandidate(change.doc.data());
+          if (change.type === "added") {
+            addCandidate(change.doc.data());
+          }
         });
       },
     );
 
-    unsubscribers.current.push(unsub1, unsub2);
+    unsubscribers.current.push(unsubAnswer, unsubCandidates);
   };
 
   const restartCallAsTutor = async () => {
@@ -322,8 +428,10 @@ const [sessionStarted, setSessionStarted] = useState(false);
   };
 
   const joinCallAsStudent = async () => {
-    setCallActive(true);
     const callDocRef = doc(db, "calls", roomId);
+    setSessionStarted(true);
+    setCallActive(true);
+    callActiveRef.current = true;
     const unsubscribe = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
       if (!data?.offer || data?.ended) return;
@@ -386,66 +494,60 @@ const [sessionStarted, setSessionStarted] = useState(false);
     });
   };
 
+  // ---------------- Navigation & Window Listeners ----------------
+
+ useEffect(() => {
+  const handleBeforeUnload = (e) => {
+    // Only show the popup if the call is active and user didn't click "End Session"
+    if (callActiveRef.current && !manualLeaveRef.current) {
+      // Modern standard: just call preventDefault()
+      e.preventDefault();
+      
+      // Chrome/Firefox require returnValue to be set to something
+      // The actual string is ignored by modern browsers; they show their own message.
+      e.returnValue = ""; 
+      return "";
+    }
+  };
+
+  window.addEventListener("beforeunload", handleBeforeUnload);
+
+  return () => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+  };
+}, []);
+
   useEffect(() => {
-    // 1. Refresh/Close logic (Same as you have)
-    const handleBeforeUnload = (e) => {
-      e.preventDefault();
-      console.log("beforeunload triggered", {
-        callActive,
-        manual: manualLeaveRef.current,
-      });
+    if (!callActive) return;
 
-      if (!callActive || manualLeaveRef.current) {
-        console.log("Early return - no popup");
-        return;
-      }
+    window.history.pushState(null, document.title, window.location.href);
 
-      console.log("Setting returnValue - popup should show");
-      e.preventDefault();
-      e.returnValue = ""; // Modern browsers show generic message
-    };
-
-    // 2. Back Button logic
     const handlePopState = (e) => {
       if (manualLeaveRef.current) return;
-
       const shouldLeave = window.confirm(
         "Are you sure you want to leave the session?",
       );
-
       if (shouldLeave) {
-        manualLeaveRef.current = true; // Set this so cleanup knows we're leaving
+        manualLeaveRef.current = true;
         stopMediaStream();
         navigate(isTutor ? "/tutor-home" : "/student-home", { replace: true });
       } else {
-        // CRITICAL: The user already moved back.
-        // We must push the current URL back onto the stack to "undo" the back button.
-        window.history.pushState(null, "", window.location.href);
+        window.history.pushState(null, document.title, window.location.href);
       }
     };
 
-    // Push an initial dummy state so there's always something to "go back" from
-    if (callActive) {
-      window.history.pushState(null, "", window.location.href);
-    }
-
-    window.addEventListener("beforeunload", handleBeforeUnload);
     window.addEventListener("popstate", handlePopState);
 
     return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload);
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [callActive, navigate, isTutor]);
+  }, [callActive, isTutor, navigate]);
 
   useEffect(() => {
     const handleOnline = () => {
       setIsOnline(true);
-      if (callActive && !isReconnectingRef.current) {
-        handleReconnection();
-      }
+      if (callActive && !isReconnectingRef.current) handleReconnection();
     };
-
     const handleOffline = () => setIsOnline(false);
 
     const handleVisibilityChange = () => {
@@ -494,6 +596,8 @@ const [sessionStarted, setSessionStarted] = useState(false);
       window.removeEventListener("offline", handleOffline);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       stopMediaStream();
+      // setSessionStarted(false);
+      setCallActive(false);
     };
   }, [roomId, isTutor, navigate, callActive]);
 
@@ -513,31 +617,6 @@ const [sessionStarted, setSessionStarted] = useState(false);
     });
   };
 
-  const toggleScreenShare = async () => {
-    if (!isSharingScreen) {
-      try {
-        const stream = await navigator.mediaDevices.getDisplayMedia({
-          video: true,
-        });
-        screenStreamRef.current = stream;
-        const track = stream.getVideoTracks()[0];
-        if (pc.current) {
-          const sender = pc.current
-            .getSenders()
-            .find((s) => s.track && s.track.kind === "video");
-          if (sender) await sender.replaceTrack(track);
-        }
-        if (localVideoRef.current) localVideoRef.current.srcObject = stream;
-        track.onended = () => stopScreenShare();
-        setIsSharingScreen(true);
-      } catch (e) {
-        console.error(e);
-      }
-    } else {
-      stopScreenShare();
-    }
-  };
-
   const sendMessage = async () => {
     if (!newMessage.trim() || !isOnline || connectionStatus !== "connected")
       return;
@@ -549,10 +628,12 @@ const [sessionStarted, setSessionStarted] = useState(false);
     setNewMessage("");
   };
 
-  const isChatDisabled = !isOnline || connectionStatus !== "connected";
+  const isChatDisabled =
+    !isOnline ||
+    (connectionStatus !== "connected" && connectionStatus !== "completed");
   const chatPlaceholder = !isOnline
     ? "Offline..."
-    : connectionStatus !== "connected"
+    : connectionStatus !== "connected" && connectionStatus !== "completed"
       ? "Connecting..."
       : "Message...";
 
@@ -568,12 +649,12 @@ const [sessionStarted, setSessionStarted] = useState(false);
         </div>
       )}
 
-      {/* 1. VIDEO AREA */}
+      {/* VIDEO AREA */}
       <section className="flex-[3] flex flex-col relative bg-neutral-950 min-h-0 border-b lg:border-b-0 lg:border-r border-white/10">
         <div className="absolute top-4 left-6 z-20 flex gap-2">
           <div className="bg-black/60 backdrop-blur px-3 py-1 rounded-full border border-white/10 flex items-center gap-2">
             <div
-              className={`w-2 h-2 rounded-full ${connectionStatus === "connected" ? "bg-green-500" : "bg-yellow-500 animate-pulse"}`}
+              className={`w-2 h-2 rounded-full ${["connected", "completed"].includes(connectionStatus) ? "bg-green-500" : "bg-yellow-500 animate-pulse"}`}
             />
             <span className="text-[10px] font-bold text-white uppercase tracking-widest">
               {connectionStatus}
@@ -590,47 +671,35 @@ const [sessionStarted, setSessionStarted] = useState(false);
               className="w-full h-full object-contain"
             />
 
+            {/* PIP Local Video */}
             <div
-              className={`absolute top-4 right-4 transition-all duration-300 border border-white/20 rounded-xl overflow-hidden bg-neutral-800 shadow-2xl z-10 ${isSharingScreen ? "w-24 sm:w-40" : "w-32 sm:w-56"}`}
+              className={`absolute top-4 right-4 transition-all duration-300 border border-white/20 rounded-xl overflow-hidden bg-neutral-800 shadow-2xl z-10 ${isSharingScreen ? "w-48 sm:w-72" : "w-32 sm:w-56"}`}
             >
               <video
                 ref={localVideoRef}
                 autoPlay
                 muted
                 playsInline
-                className="w-full h-full object-cover scale-x-[-1]"
+                className={`w-full h-full object-cover ${!isSharingScreen ? "scale-x-[-1]" : ""}`}
               />
-
-              {isSharingScreen && (
-                <video
-                  ref={screenVideoRef}
-                  autoPlay
-                  muted
-                  playsInline
-                  className="absolute top-4 right-4 w-64 h-36 object-cover border border-white/20"
-                />
-              )}
             </div>
 
-            {!sessionStarted &&
-              connectionStatus !== "connected" &&
-              connectionStatus !== "checking" &&
-              connectionStatus != "disconnected" && (
-                <div className="absolute inset-0 bg-neutral-950/90 z-30 flex flex-col items-center justify-center text-center p-6">
-                  <h2 className="text-2xl font-bold text-white mb-6">
-                    {isTutor
-                      ? "Ready to start the lesson?"
-                      : "Waiting for tutor..."}
-                  </h2>
-                  <button
-                    disabled={!isOnline}
-                    onClick={isTutor ? startCallAsTutor : joinCallAsStudent}
-                    className={`px-10 py-3 rounded-xl font-bold transition-all  ${isOnline ? "bg-indigo-600 text-white cursor-pointer" : "bg-neutral-700 text-neutral-500 cursor-pointer"}`}
-                  >
-                    {isTutor ? "Start Session" : "Join Session"}
-                  </button>
-                </div>
-              )}
+            {!sessionStarted && (
+              <div className="absolute inset-0 bg-neutral-950/90 z-30 flex flex-col items-center justify-center text-center p-6">
+                <h2 className="text-2xl font-bold text-white mb-6">
+                  {isTutor
+                    ? "Ready to start the lesson?"
+                    : "Waiting for tutor..."}
+                </h2>
+                <button
+                  disabled={!isOnline}
+                  onClick={isTutor ? startCallAsTutor : joinCallAsStudent}
+                  className={`px-10 py-3 rounded-xl font-bold transition-all ${isOnline ? "bg-indigo-600 text-white cursor-pointer" : "bg-neutral-700 text-neutral-500 cursor-not-allowed"}`}
+                >
+                  {isTutor ? "Start Session" : "Join Session"}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -638,20 +707,20 @@ const [sessionStarted, setSessionStarted] = useState(false);
         <div className="h-20 sm:h-24 bg-neutral-900/80 backdrop-blur border-t border-white/10 flex items-center justify-center gap-2 sm:gap-6 px-4">
           <button
             onClick={toggleMic}
-            className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}
+            className={`w-12 h-12 flex items-center rounded-2xl justify-center ${micOn ? "bg-neutral-800" : "bg-red-500"} text-white cursor-pointer hover:bg-opacity-80`}
           >
             {micOn ? "🎤" : "🔇"}
           </button>
           <button
             onClick={toggleCam}
-            className={`w-12 h-12 flex items-center rounded-2xl justify-center ${camOn ? "bg-neutral-800 cursor-pointer" : "bg-red-500 cursor-pointer"} text-white`}
+            className={`w-12 h-12 flex items-center rounded-2xl justify-center ${camOn ? "bg-neutral-800" : "bg-red-500"} text-white cursor-pointer hover:bg-opacity-80`}
           >
             {camOn ? "📹" : "📷"}
           </button>
           <div className="w-px h-8 bg-white/10 mx-2" />
           <button
             onClick={toggleScreenShare}
-            className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest ${isSharingScreen ? "bg-blue-600 text-white cursor-pointer" : "bg-neutral-800 text-neutral-300 cursor-pointer"}`}
+            className={`px-4 sm:px-6 py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all ${isSharingScreen ? "bg-blue-600 text-white" : "bg-neutral-800 text-neutral-300"} cursor-pointer hover:bg-opacity-80`}
           >
             {isSharingScreen ? "Stop Sharing" : "Share Screen"}
           </button>
@@ -664,9 +733,9 @@ const [sessionStarted, setSessionStarted] = useState(false);
         </div>
       </section>
 
-      {/* 2. CHAT SIDEBAR */}
+      {/* CHAT SIDEBAR */}
       <aside className="flex-1 lg:max-w-sm flex flex-col bg-neutral-900 h-[40vh] lg:h-full">
-        <div className="p-4 border-b border-white/5 flex items-center justify-between">
+        <div className="p-4 border-b border-white/5">
           <h2 className="text-white font-black text-[10px] uppercase tracking-widest">
             Classroom Chat
           </h2>
@@ -709,7 +778,7 @@ const [sessionStarted, setSessionStarted] = useState(false);
             <button
               onClick={sendMessage}
               disabled={isChatDisabled}
-              className={`p-2.5 rounded-lg transition-colors ${!isChatDisabled ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer" : "bg-neutral-800 text-neutral-600 cursor-pointer"}`}
+              className={`p-2.5 rounded-lg transition-colors ${!isChatDisabled ? "bg-indigo-600 hover:bg-indigo-500 text-white cursor-pointer" : "bg-neutral-800 text-neutral-600"}`}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -722,11 +791,13 @@ const [sessionStarted, setSessionStarted] = useState(false);
               </svg>
             </button>
           </div>
-          {connectionStatus !== "connected" && isOnline && callActive && (
-            <p className="text-[9px] text-yellow-500 mt-2 text-center uppercase tracking-widest font-bold">
-              Establishing Peer Connection...
-            </p>
-          )}
+          {["checking", "new", "disconnected"].includes(connectionStatus) &&
+            isOnline &&
+            callActive && (
+              <p className="text-[9px] text-yellow-500 mt-2 text-center uppercase tracking-widest font-bold">
+                Establishing Peer Connection...
+              </p>
+            )}
         </div>
       </aside>
 
