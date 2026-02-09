@@ -82,23 +82,17 @@ export default function TutorSessionHistory() {
 	};
 
 	const handleJoin = async (id) => {
-		const callSnap = await getDoc(doc(db, "calls", id));
+  // Check the QUESTION status instead of the CALL 'ended' flag
+  const questionSnap = await getDoc(doc(db, "questions", id));
 
-		if (!callSnap.exists()) {
-			// Tutor can create the call
-			navigate(`/tutor/session/${id}`);
-			return;
-		}
+  if (questionSnap.exists() && questionSnap.data()?.status === "completed") {
+    alert("This lesson is officially marked as completed and cannot be rejoined.");
+    return;
+  }
 
-		// 🔥 ONLY block if session was COMPLETED
-		if (callSnap.data()?.ended === true) {
-			alert("This session has already been completed");
-			return;
-		}
-
-		// Otherwise allow unlimited rejoin
-		navigate(`/tutor/session/${id}`);
-	};
+  // Allow join regardless of whether the last call was 'ended'
+  navigate(`/tutor/session/${id}`);
+};
 
 	return (
 		<div className="min-h-screen bg-black px-6 py-24">
