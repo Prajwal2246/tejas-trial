@@ -15,6 +15,8 @@ import { useAuth } from "../context/AuthContext";
 import { Calendar, CheckCircle2, ChevronRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import ChatButton from "./ChatButton";
+
 
 /* Date formatter */
 const formatDate = (timestamp) => {
@@ -82,17 +84,17 @@ export default function TutorSessionHistory() {
 	};
 
 	const handleJoin = async (id) => {
-  // Check the QUESTION status instead of the CALL 'ended' flag
-  const questionSnap = await getDoc(doc(db, "questions", id));
+		// Check the QUESTION status instead of the CALL 'ended' flag
+		const questionSnap = await getDoc(doc(db, "questions", id));
 
-  if (questionSnap.exists() && questionSnap.data()?.status === "completed") {
-    alert("This lesson is officially marked as completed and cannot be rejoined.");
-    return;
-  }
+		if (questionSnap.exists() && questionSnap.data()?.status === "completed") {
+			alert("This lesson is officially marked as completed and cannot be rejoined.");
+			return;
+		}
 
-  // Allow join regardless of whether the last call was 'ended'
-  navigate(`/tutor/session/${id}`);
-};
+		// Allow join regardless of whether the last call was 'ended'
+		navigate(`/tutor/session/${id}`);
+	};
 
 	return (
 		<div className="min-h-screen bg-black px-6 py-24">
@@ -107,7 +109,7 @@ export default function TutorSessionHistory() {
 						<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
 							No active sessions
 						</div>
-					:	<div className="grid gap-6">
+						: <div className="grid gap-6">
 							{active.map((s) => (
 								<div
 									key={s.id}
@@ -123,16 +125,17 @@ export default function TutorSessionHistory() {
 									</div>
 
 									<div className="flex gap-4">
+										<ChatButton sessionId={s.id} role="tutor" />
 										<button
 											onClick={() => handleJoin(s.id)}
-											className="px-5 py-2 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500 hover:text-white transition"
+											className="px-5 cursor-pointer py-2 rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20 hover:bg-sky-500 hover:text-white transition"
 										>
 											Join
 										</button>
 
 										<button
 											onClick={() => handleCompleted(s.id)}
-											className="px-5 py-2 rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition"
+											className="px-5 py-2 cursor-pointer rounded-full bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition"
 										>
 											✓ Complete
 										</button>
@@ -148,36 +151,36 @@ export default function TutorSessionHistory() {
 
 				{loading ?
 					<p className="text-zinc-500">Loading...</p>
-				: completed.length === 0 ?
-					<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
-						No completed sessions
-					</div>
-				:	<div className="grid gap-6">
-						{completed.map((s, i) => (
-							<motion.div
-								key={s.id}
-								initial={{ opacity: 0, x: -20 }}
-								animate={{ opacity: 1, x: 0 }}
-								transition={{ delay: i * 0.05 }}
-								className="flex justify-between items-center p-8 bg-zinc-900/50 border border-white/10 rounded-2xl"
-							>
-								<div className="flex gap-4 items-center">
-									<CheckCircle2 className="text-emerald-500" />
-									<div>
-										<h3 className="text-white font-bold">
-											{s.title}
-										</h3>
-										<p className="text-xs text-zinc-500">
-											<Calendar size={12} className="inline mr-1" />
-											{formatDate(s.completedAt)}
-										</p>
+					: completed.length === 0 ?
+						<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
+							No completed sessions
+						</div>
+						: <div className="grid gap-6">
+							{completed.map((s, i) => (
+								<motion.div
+									key={s.id}
+									initial={{ opacity: 0, x: -20 }}
+									animate={{ opacity: 1, x: 0 }}
+									transition={{ delay: i * 0.05 }}
+									className="flex justify-between items-center p-8 bg-zinc-900/50 border border-white/10 rounded-2xl"
+								>
+									<div className="flex gap-4 items-center">
+										<CheckCircle2 className="text-emerald-500" />
+										<div>
+											<h3 className="text-white font-bold">
+												{s.title}
+											</h3>
+											<p className="text-xs text-zinc-500">
+												<Calendar size={12} className="inline mr-1" />
+												{formatDate(s.completedAt)}
+											</p>
+										</div>
 									</div>
-								</div>
 
-								<ChevronRight className="text-zinc-500" />
-							</motion.div>
-						))}
-					</div>
+									<ChevronRight className="text-zinc-500" />
+								</motion.div>
+							))}
+						</div>
 				}
 			</div>
 		</div>

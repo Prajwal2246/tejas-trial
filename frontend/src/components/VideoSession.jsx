@@ -164,22 +164,22 @@ export default function VideoSession({
     setCallActive(false);
   };
 
- const leaveSession = async () => {
-  manualLeaveRef.current = true;
-  const callDocRef = doc(db, "calls", roomId);
+  const leaveSession = async () => {
+    manualLeaveRef.current = true;
+    const callDocRef = doc(db, "calls", roomId);
 
-  try {
-    await updateDoc(callDocRef, {
-      // Don't use 'ended: true' here if you want to rejoin easily.
-      // Use 'tutorOnline: false' to signal you left.
-      tutorOnline: false,
-      lastLeftAt: serverTimestamp(),
-    });
-  } catch (err) { console.error(err); }
+    try {
+      await updateDoc(callDocRef, {
+        // Don't use 'ended: true' here if you want to rejoin easily.
+        // Use 'tutorOnline: false' to signal you left.
+        tutorOnline: false,
+        lastLeftAt: serverTimestamp(),
+      });
+    } catch (err) { console.error(err); }
 
-  stopMediaStream();
-  navigate(isTutor ? "/tutor-home" : "/student-home");
-};
+    stopMediaStream();
+    navigate(isTutor ? "/tutor-home" : "/student-home");
+  };
 
   // ---------------- WebRTC Logic ----------------
 
@@ -309,93 +309,93 @@ export default function VideoSession({
     }
   };
 
- const startCallAsTutor = async () => {
-  const callDocRef = doc(db, "calls", roomId);
+  const startCallAsTutor = async () => {
+    const callDocRef = doc(db, "calls", roomId);
 
-  try {
-    // 1. CLEAN RESET (Crucial for Rejoin)
-    // We remove the 'if (ended === true)' check that was blocking you.
-    // This call forces the room to re-open and wipes old connection data.
-    await setDoc(
-      callDocRef,
-      {
-        createdAt: serverTimestamp(),
-        ended: false,         // Re-opens the room for the student
-        tutorOnline: true,    // Signals you are present
-        offer: deleteField(), // Wipes old offer from previous session
-        answer: deleteField(),// Wipes old answer from previous session
-      },
-      { merge: true }
-    );
+    try {
+      // 1. CLEAN RESET (Crucial for Rejoin)
+      // We remove the 'if (ended === true)' check that was blocking you.
+      // This call forces the room to re-open and wipes old connection data.
+      await setDoc(
+        callDocRef,
+        {
+          createdAt: serverTimestamp(),
+          ended: false,         // Re-opens the room for the student
+          tutorOnline: true,    // Signals you are present
+          offer: deleteField(), // Wipes old offer from previous session
+          answer: deleteField(),// Wipes old answer from previous session
+        },
+        { merge: true }
+      );
 
-    // 2. Clear ICE candidates from previous sessions
-    await resetCallSignaling();
+      // 2. Clear ICE candidates from previous sessions
+      await resetCallSignaling();
 
-    // 3. Update Local State
-    setSessionStarted(true);
-    setCallActive(true);
-    if (callActiveRef.current !== undefined) {
-      callActiveRef.current = true; 
-    }
-
-    // 4. Media Setup
-    const stream = await setupMedia();
-    if (!stream || !pc.current) {
-      console.error("Failed to setup media or PeerConnection");
-      return;
-    }
-
-    // 5. Create Fresh WebRTC Offer
-    const offer = await pc.current.createOffer();
-    await pc.current.setLocalDescription(offer);
-
-    // 6. Push Offer to Firestore
-    await updateDoc(callDocRef, {
-      offer: {
-        type: offer.type,
-        sdp: offer.sdp,
-      },
-    });
-
-    
-
-    // 7. Listen for Student's Answer
-    const unsubAnswer = onSnapshot(callDocRef, async (snap) => {
-      const data = snap.data();
-      // Only set remote description if we have an answer and haven't set one yet
-      if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
-
-      try {
-        await pc.current.setRemoteDescription(
-          new RTCSessionDescription(data.answer)
-        );
-        // Process any ICE candidates that arrived early
-        await processCandidateQueue();
-      } catch (err) {
-        console.error("Error setting remote answer:", err);
+      // 3. Update Local State
+      setSessionStarted(true);
+      setCallActive(true);
+      if (callActiveRef.current !== undefined) {
+        callActiveRef.current = true;
       }
-    });
 
-    // 8. Listen for Student's ICE Candidates
-    const unsubCandidates = onSnapshot(
-      collection(callDocRef, "answerCandidates"),
-      (snap) => {
-        snap.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            addCandidate(change.doc.data());
-          }
-        });
+      // 4. Media Setup
+      const stream = await setupMedia();
+      if (!stream || !pc.current) {
+        console.error("Failed to setup media or PeerConnection");
+        return;
       }
-    );
 
-    // Store unsubs for cleanup
-    unsubscribers.current.push(unsubAnswer, unsubCandidates);
+      // 5. Create Fresh WebRTC Offer
+      const offer = await pc.current.createOffer();
+      await pc.current.setLocalDescription(offer);
 
-  } catch (error) {
-    console.error("Error in startCallAsTutor:", error);
-    alert("Failed to start session. Please refresh and try again.");
-  }
-};
+      // 6. Push Offer to Firestore
+      await updateDoc(callDocRef, {
+        offer: {
+          type: offer.type,
+          sdp: offer.sdp,
+        },
+      });
+
+
+
+      // 7. Listen for Student's Answer
+      const unsubAnswer = onSnapshot(callDocRef, async (snap) => {
+        const data = snap.data();
+        // Only set remote description if we have an answer and haven't set one yet
+        if (!pc.current || !data?.answer || pc.current.remoteDescription) return;
+
+        try {
+          await pc.current.setRemoteDescription(
+            new RTCSessionDescription(data.answer)
+          );
+          // Process any ICE candidates that arrived early
+          await processCandidateQueue();
+        } catch (err) {
+          console.error("Error setting remote answer:", err);
+        }
+      });
+
+      // 8. Listen for Student's ICE Candidates
+      const unsubCandidates = onSnapshot(
+        collection(callDocRef, "answerCandidates"),
+        (snap) => {
+          snap.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              addCandidate(change.doc.data());
+            }
+          });
+        }
+      );
+
+      // Store unsubs for cleanup
+      unsubscribers.current.push(unsubAnswer, unsubCandidates);
+
+    } catch (error) {
+      console.error("Error in startCallAsTutor:", error);
+      alert("Failed to start session. Please refresh and try again.");
+    }
+  };
 
   const restartCallAsTutor = async () => {
     const callDocRef = doc(db, "calls", roomId);
@@ -440,7 +440,7 @@ export default function VideoSession({
 
     const unsubscribe = onSnapshot(callDocRef, async (snap) => {
       const data = snap.data();
-      
+
       // 🔥 CHANGE: If there is no offer yet OR tutor is offline, 
       // just stay in this listener and wait. 
       // This allows the UI to show the "Waiting" message.
@@ -448,7 +448,7 @@ export default function VideoSession({
 
       unsubscribe(); // Stop listening once we have a valid offer
       await setupMedia();
-      
+
       if (!pc.current.remoteDescription) {
         await pc.current.setRemoteDescription(
           new RTCSessionDescription(data.offer),
@@ -459,7 +459,7 @@ export default function VideoSession({
       await updateDoc(callDocRef, {
         answer: { type: answer.type, sdp: answer.sdp },
       });
-      
+
       const candidatesSnap = await getDocs(
         collection(callDocRef, "offerCandidates"),
       );
@@ -509,26 +509,26 @@ export default function VideoSession({
 
   // ---------------- Navigation & Window Listeners ----------------
 
- useEffect(() => {
-  const handleBeforeUnload = (e) => {
-    // Only show the popup if the call is active and user didn't click "End Session"
-    if (callActiveRef.current && !manualLeaveRef.current) {
-      // Modern standard: just call preventDefault()
-      e.preventDefault();
-      
-      // Chrome/Firefox require returnValue to be set to something
-      // The actual string is ignored by modern browsers; they show their own message.
-      e.returnValue = ""; 
-      return "";
-    }
-  };
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      // Only show the popup if the call is active and user didn't click "End Session"
+      if (callActiveRef.current && !manualLeaveRef.current) {
+        // Modern standard: just call preventDefault()
+        e.preventDefault();
 
-  window.addEventListener("beforeunload", handleBeforeUnload);
+        // Chrome/Firefox require returnValue to be set to something
+        // The actual string is ignored by modern browsers; they show their own message.
+        e.returnValue = "";
+        return "";
+      }
+    };
 
-  return () => {
-    window.removeEventListener("beforeunload", handleBeforeUnload);
-  };
-}, []);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, []);
 
   useEffect(() => {
     if (!callActive) return;
@@ -596,13 +596,13 @@ export default function VideoSession({
     );
 
     const unsubCall = onSnapshot(doc(db, "calls", roomId), (snap) => {
-  const data = snap.data();
-  // Listen for 'tutorOnline: false' to pull the student out
-  if (data?.tutorOnline === false && !isTutor) {
-    stopMediaStream();
-    navigate("/student-home");
-  }
-});
+      const data = snap.data();
+      // Listen for 'tutorOnline: false' to pull the student out
+      if (data?.tutorOnline === false && !isTutor) {
+        stopMediaStream();
+        navigate("/student-home");
+      }
+    });
 
     return () => {
       window.removeEventListener("online", handleOnline);

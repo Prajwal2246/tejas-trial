@@ -13,6 +13,7 @@ import { useAuth } from "../context/AuthContext";
 import { Calendar, CheckCircle2, ChevronRight, BookOpen, PlayCircle } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useNavigate } from "react-router-dom";
+import ChatButton from "./ChatButton";
 
 const formatDate = (timestamp) => {
 	if (!timestamp) return "Processing...";
@@ -54,7 +55,6 @@ export default function StudentSessionHistory() {
 		const callRef = doc(db, "calls", id);
 		const callSnap = await getDoc(callRef);
 
-		
 		if (!callSnap.exists() || callSnap.data()?.tutorOnline !== true) {
 			openModal(
 				id,
@@ -132,7 +132,7 @@ export default function StudentSessionHistory() {
 						<div className="border border-dashed border-white/10 p-10 rounded-2xl text-center text-zinc-500">
 							No active sessions
 						</div>
-					:	<div className="grid gap-4 relative">
+						: <div className="grid gap-4 relative">
 							{activeSessions.map((s, i) => (
 								<div key={s.id} className="relative">
 									<motion.div
@@ -153,13 +153,13 @@ export default function StudentSessionHistory() {
 												</p>
 											</div>
 										</div>
-
-										<button
-											onClick={() => handleJoin(s.id)}
-											className="px-6 py-3 rounded-full bg-sky-500 text-black font-bold hover:bg-sky-400 transition"
-										>
-											Join Session
-										</button>
+										<div className="flex gap-3"><ChatButton  sessionId={s.id} role="student" />
+											<button
+												onClick={() => handleJoin(s.id)}
+												className="px-6 cursor-pointer py-3 rounded-full bg-sky-500 text-black font-bold hover:bg-sky-400 transition"
+											>
+												Join Session
+											</button></div>
 									</motion.div>
 
 									{/* INLINE MODAL FOR THIS CARD */}
@@ -217,31 +217,31 @@ export default function StudentSessionHistory() {
 				<h2 className="text-2xl font-bold mb-6">Completed Sessions</h2>
 				{loading ?
 					<p className="text-zinc-500">Loading...</p>
-				: history.length === 0 ?
-					<p className="text-zinc-500">No completed sessions yet</p>
-				:	<div className="grid gap-4">
-						{history.map((s, i) => (
-							<motion.div
-								key={s.id}
-								initial={{ opacity: 0, y: 20 }}
-								animate={{ opacity: 1, y: 0 }}
-								transition={{ delay: i * 0.05 }}
-								className="flex justify-between items-center p-8 bg-zinc-900/30 border border-white/5 rounded-2xl"
-							>
-								<div className="flex items-center gap-4">
-									<CheckCircle2 className="text-emerald-500" />
-									<div>
-										<h3 className="font-bold">{s.title}</h3>
-										<p className="text-xs text-zinc-500">
-											<Calendar size={12} className="inline mr-1" />
-											{formatDate(s.completedAt)}
-										</p>
+					: history.length === 0 ?
+						<p className="text-zinc-500">No completed sessions yet</p>
+						: <div className="grid gap-4">
+							{history.map((s, i) => (
+								<motion.div
+									key={s.id}
+									initial={{ opacity: 0, y: 20 }}
+									animate={{ opacity: 1, y: 0 }}
+									transition={{ delay: i * 0.05 }}
+									className="flex justify-between items-center p-8 bg-zinc-900/30 border border-white/5 rounded-2xl"
+								>
+									<div className="flex items-center gap-4">
+										<CheckCircle2 className="text-emerald-500" />
+										<div>
+											<h3 className="font-bold">{s.title}</h3>
+											<p className="text-xs text-zinc-500">
+												<Calendar size={12} className="inline mr-1" />
+												{formatDate(s.completedAt)}
+											</p>
+										</div>
 									</div>
-								</div>
-								<ChevronRight className="text-zinc-500" />
-							</motion.div>
-						))}
-					</div>
+									<ChevronRight className="text-zinc-500" />
+								</motion.div>
+							))}
+						</div>
 				}
 			</div>
 		</div>
